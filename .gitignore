@@ -1,0 +1,28 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+env/
+venv/
+.env
+
+# IDE specific files (VS Code)
+.vscode/
+*.code-workspace
+
+# Rope project settings
+.ropeproject/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Local development settings
+.env
+
+# Misc
+*.log
+.DS_Store
