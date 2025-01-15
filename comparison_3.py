@@ -65,16 +65,26 @@ class SandboxExecutor:
         self._validate_environment()
 
     def _validate_environment(self):
-        required_vars = ["OPENAI_API_KEY", "DAYTONA_API_KEY", "DAYTONA_SERVER_URL", "CSB_API_KEY"]
-        missing_vars = [var for var in required_vars if not os.getenv(var)]
-        if missing_vars:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+        required_vars = {
+            "OPENAI_API_KEY": "OpenAI API key",
+            "DAYTONA_API_KEY": "Daytona API key",
+            "DAYTONA_SERVER_URL": "Daytona server URL",
+            "CSB_API_KEY": "CodeSandbox API key"
+        }
+
+        for var, description in required_vars.items():
+            value = os.getenv(var)
+            if not value:
+                raise ValueError(f"Missing {description} in environment variables: {var}")
+            logger.info(f"Found {description}")  # Add logging but mask sensitive values
 
     def execute_daytona(self, code: str) -> tuple[Any, EnhancedTimingMetrics]:
         metrics = EnhancedTimingMetrics()
         workspace = None
+        daytona = None
 
         try:
+            logger.info("Initializing Daytona...")
             start_time = time.time()
             config = DaytonaConfig(
                 api_key=str(os.getenv("DAYTONA_API_KEY")),
@@ -84,13 +94,17 @@ class SandboxExecutor:
             daytona = Daytona(config=config)
             metrics.add_metric("Initialization", time.time() - start_time)
 
+            logger.info("Creating Daytona workspace...")
             start_time = time.time()
             params = CreateWorkspaceParams(language="python")
             workspace = daytona.create(params=params)
+            logger.info(f"Workspace created: {workspace}")
             metrics.add_metric("Workspace Creation", time.time() - start_time)
 
+            logger.info("Executing code in Daytona...")
             start_time = time.time()
             response = workspace.process.code_run(code)
+            logger.info(f"Code execution completed: {response}")
             metrics.add_metric("Code Execution", time.time() - start_time)
 
             return response.result, metrics
@@ -100,13 +114,16 @@ class SandboxExecutor:
             logger.error(f"Daytona execution error: {str(e)}")
             raise
         finally:
-            if workspace:
+            if workspace and daytona:
                 start_time = time.time()
                 try:
+                    logger.info("Cleaning up Daytona workspace...")
                     daytona.remove(workspace)
+                    logger.info("Daytona cleanup completed")
+                    metrics.add_metric("Cleanup", time.time() - start_time)
                 except Exception as e:
                     logger.error(f"Daytona cleanup error: {str(e)}")
-                metrics.add_metric("Cleanup", time.time() - start_time)
+                    metrics.add_error(f"Cleanup error: {str(e)}")
 
     def execute_e2b(self, code: str) -> tuple[Any, EnhancedTimingMetrics]:
         metrics = EnhancedTimingMetrics()
@@ -143,16 +160,20 @@ class SandboxExecutor:
         metrics = EnhancedTimingMetrics()
 
         try:
+            logger.info("Initializing CodeSandbox request...")  # Add logging
             start_time = time.time()
             metrics.add_metric("Initialization", time.time() - start_time)
 
+            logger.info("Sending request to CodeSandbox...")  # Add logging
             response = requests.post(
                 'http://localhost:3000/execute',
                 json={'code': code},
                 timeout=30
             )
+            logger.info(f"CodeSandbox response status: {response.status_code}")  # Add logging
             response.raise_for_status()
             result = response.json()
+            logger.info(f"CodeSandbox execution completed")  # Add logging
 
             # Add metrics from the service
             for metric_name, value in result['metrics'].items():
@@ -163,11 +184,16 @@ class SandboxExecutor:
                         'codeExecution': 'Code Execution',
                         'cleanup': 'Cleanup'
                     }[metric_name],
-                    value / 1000  # Convert from milliseconds
+                    value / 1000
                 )
 
             return result['output'], metrics
 
+        except requests.exceptions.ConnectionError:
+            error_msg = "Failed to connect to CodeSandbox server. Is it running?"
+            logger.error(error_msg)
+            metrics.add_error(error_msg)
+            raise
         except Exception as e:
             metrics.add_error(str(e))
             logger.error(f"CodeSandbox execution error: {str(e)}")
@@ -180,25 +206,38 @@ class SandboxExecutor:
             'codesandbox': {'metrics': EnhancedTimingMetrics(), 'output': None}
         }
 
+        logger.info("Starting comparison run...")  # Add logging
+
         logger.info("Performing warmup runs...")
-        for _ in range(self.warmup_runs):
-            self.execute_daytona(code)
-            self.execute_e2b(code)
-            self.execute_codesandbox(code)
+        for i in range(self.warmup_runs):
+            logger.info(f"Warmup run {i+1}/{self.warmup_runs}")  # Add logging
+            for platform in ['daytona', 'e2b', 'codesandbox']:
+                try:
+                    logger.info(f"Warming up {platform}...")  # Add logging
+                    executor = getattr(self, f"execute_{platform}")
+                    executor(code)
+                except Exception as e:
+                    logger.error(f"Warmup failed for {platform}: {str(e)}")
 
         logger.info(f"Performing {self.measurement_runs} measurement runs...")
         for run in range(self.measurement_runs):
-            # Execute all platforms
+            logger.info(f"Measurement run {run+1}/{self.measurement_runs}")  # Add logging
             for platform, executor in {
                 'daytona': self.execute_daytona,
                 'e2b': self.execute_e2b,
                 'codesandbox': self.execute_codesandbox
             }.items():
-                output, metrics = executor(code)
-                for metric_name, metric_values in metrics.metrics.items():
-                    if metric_values:
-                        results[platform]['metrics'].metrics[metric_name].extend(metric_values)
-                results[platform]['output'] = output
+                try:
+                    logger.info(f"Executing {platform}...")  # Add logging
+                    output, metrics = executor(code)
+                    for metric_name, metric_values in metrics.metrics.items():
+                        if metric_values:
+                            results[platform]['metrics'].metrics[metric_name].extend(metric_values)
+                    results[platform]['output'] = output
+                    logger.info(f"Completed {platform} execution")  # Add logging
+                except Exception as e:
+                    logger.error(f"Failed to execute {platform}: {str(e)}")
+                    results[platform]['metrics'].add_error(str(e))
 
         return results
 
@@ -258,7 +297,7 @@ def main():
     3. Prints the results with appropriate formatting
     """
 
-    executor = SandboxExecutor(warmup_runs=2, measurement_runs=5)
+    executor = SandboxExecutor(warmup_runs=0, measurement_runs=2)
 
     try:
         llm = OpenAI(temperature=0.2, max_tokens=1000)
