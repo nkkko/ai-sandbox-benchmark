@@ -49,6 +49,7 @@ if not os.getenv("DAYTONA_SERVER_URL"):
 
 daytona_api_key = os.getenv("DAYTONA_API_KEY")
 daytona_server_url = os.getenv("DAYTONA_SERVER_URL")
+print(daytona_api_key)
 
 if not daytona_api_key or not daytona_server_url:
     raise ValueError("Missing required environment variables")

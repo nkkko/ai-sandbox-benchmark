@@ -38,6 +38,11 @@ DAYTONA_SERVER_URL=your_daytona_server_url
 E2B_API_KEY=your_e2b_key
 ```
 
+### Testing Codesandbox
+We need to run a wrapper for js.
+
+Run `node codesandbox-service.js`
+
 ## Project Structure
 
 - `comparison_stats.py` - Advanced statistical comparison between sandboxes
