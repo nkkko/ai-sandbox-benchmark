@@ -1,21 +1,29 @@
 # SDK Playground and Comparison
 
-A comparative analysis toolkit for testing and benchmarking different code execution sandboxes, specifically Daytona and e2b.
+A comprehensive toolkit for testing and benchmarking different code execution sandboxes, including Daytona, e2b, CodeSandbox, and Modal.
 
 ## Overview
 
 This project provides tools to:
 - Generate code using LangChain and OpenAI
-- Execute code in both Daytona and e2b sandboxes
+- Execute code in multiple sandbox environments:
+  - Daytona
+  - e2b
+  - CodeSandbox
+  - Modal
 - Compare performance metrics between different sandbox environments
 - Visualize execution results and timing statistics
 
 ## Requirements
 
 - Python 3.8+
-- OpenAI API key
-- Daytona API key and server URL
-- e2b environment setup
+- Node.js (for CodeSandbox service)
+- Required API keys:
+  - OpenAI API key
+  - Daytona API key and server URL
+  - e2b environment setup
+  - CodeSandbox API key
+  - Modal setup
 
 ## Installation
 
@@ -25,63 +33,77 @@ git clone https://github.com/nkkko/sdk-play.git
 cd sdk-play
 ```
 
-2. Install dependencies:
+2. Install Python dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Create a `.env` file with your credentials:
+3. Install Node.js dependencies (for CodeSandbox service):
+```bash
+npm install
+```
+
+4. Create a `.env` file with your credentials:
 ```env
 OPENAI_API_KEY=your_openai_api_key
 DAYTONA_API_KEY=your_daytona_api_key
 DAYTONA_SERVER_URL=your_daytona_server_url
+CSB_API_KEY=your_codesandbox_api_key
 E2B_API_KEY=your_e2b_key
 ```
 
-### Testing Codesandbox
-We need to run a wrapper for js.
-
-Run `node codesandbox-service.js`
-
 ## Project Structure
 
-- `comparison_stats.py` - Advanced statistical comparison between sandboxes
-- `comparison.py` - Basic comparison between Daytona and e2b sandboxes
-- `daytona_example.py` - Standalone Daytona sandbox example
-- `e2b_example.py` - Standalone e2b sandbox example
-- `requirements.txt` - Project dependencies
+- `comparison_4.py` - Latest version with Modal integration
+- `comparison_3.py` - Previous version with CodeSandbox integration
+- `comparison_stats.py` - Statistical analysis tools
+- `comparison.py` - Basic comparison between sandboxes
+- `daytona_example.py` - Standalone Daytona example
+- `e2b_example.py` - Standalone e2b example
+- `modaltest.py` - Modal sandbox testing
+- `codesandbox-service.js` - CodeSandbox wrapper service
 
 ## Usage
 
-### Basic Comparison
+### Running the CodeSandbox Service
+Start the CodeSandbox wrapper service:
 ```bash
-python comparison.py
+node codesandbox-service.js
 ```
 
-### Detailed Statistical Analysis
+### Running Comparisons
 ```bash
-python comparison_stats.py
+# Full comparison (all sandboxes)
+python comparison_4.py
+
+# Previous version (without Modal)
+python comparison_3.py
+
+# Basic comparison
+python comparison.py
 ```
 
 ### Individual Sandbox Testing
 ```bash
 python daytona_example.py
 python e2b_example.py
+python modaltest.py
 ```
 
 ## Features
 
 - Code generation using LangChain and OpenAI
-- Sandbox execution timing metrics
+- Comprehensive sandbox execution timing metrics
 - Colored console output
 - Syntax highlighting for generated code
 - Tabulated performance comparisons
 - Statistical analysis of execution times
 - Error handling and reporting
+- Logging system
 
-## Output Metrics
+## Measured Metrics
 
-The comparison tools measure:
+For each sandbox environment, the following metrics are collected:
 - Initialization time
 - Workspace creation time
 - Code execution time
@@ -105,5 +127,7 @@ Apache 2.0
 
 - Daytona SDK
 - e2b Code Interpreter
+- CodeSandbox SDK
+- Modal
 - LangChain
 - OpenAI
