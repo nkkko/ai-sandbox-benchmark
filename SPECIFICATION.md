@@ -78,7 +78,7 @@ graph LR
 5. **Network Performance Tests**
    - Client-API latency measurements
    - Workspace external connectivity
-   - Standard endpoint response times (docker, pypi, npm, etc)
+   - Standard endpoint response times (docker, github, pypi, npm, etc)
    - Geographic latency variations
    - Network route stability
 
