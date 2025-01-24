@@ -1,6 +1,6 @@
 # AI Sandbox Development Environment Testing Framework
 
-**Core Testing Areas and Requirements**
+## **Core Testing Areas and Requirements**
 
 Reproducibility is Key: We need to design tests that yield similar results across executions, focusing on deterministic code and sandbox setups.
 
@@ -25,21 +25,21 @@ Reproducibility is Key: We need to design tests that yield similar results acros
 **Implementation Requirements**
 
 1. **Standardised Test Case Structure**
-For each issue (test case), define a JSON-based test spec with:
+For each issue (test case), define a test spec with:
    - A detailed prompt that an agent has to complete.
    - Expected outcome: either an output or a pass/fail condition based on test runs.
    - Required dependencies: specify the environment requirements using a standard interface (like requirements.txt or environment.yml).
    - Optional test suite: code with various tests that can be used to evaluate the quality of code.
    - Expected execution speed benchmark.
 
-2. **Metrics Collection**
+1. **Metrics Collection**
    - Execution timing
    - Resource usage (CPU, memory, disk)
    - Success/failure rates
    - Error categorization
    - Setup time measurements
 
-3. **Testing Categories**
+2. **Testing Categories**
    - Environment consistency tests
    - Dependency conflict scenarios
    - Resource limit testing
@@ -48,7 +48,7 @@ For each issue (test case), define a JSON-based test spec with:
    - Performance benchmarks
    - Timeout handling
 
-4. **Reporting Requirements**
+3. **Reporting Requirements**
    - Structured output format
    - Detailed error logging
    - Performance metrics
@@ -56,7 +56,7 @@ For each issue (test case), define a JSON-based test spec with:
    - Test suite results
    - Comparative analysis capabilities
 
-5. **Error Handling Requirements**
+4. **Error Handling Requirements**
    - Capture setup failures
    - Track execution errors
    - Report resource exhaustion
@@ -86,9 +86,7 @@ For each issue (test case), define a JSON-based test spec with:
    - Resource limit verification
    - Cleanup validation
 
-This specification provides a framework for building a robust testing suite that evaluates sandbox providers across multiple dimensions, focusing on real-world usability, reliability, and performance metrics.
-
-**Brainstorming Test Ideas (Inspired by SWE-bench):**
+## **Brainstorming Test Ideas (Inspired by SWE-bench):**
 
 1. **Environment Consistency Tests:**
     *   **Idea:** Create a set of test scripts that install a variety of packages (with specific versions) and then verify that the correct versions are installed.
