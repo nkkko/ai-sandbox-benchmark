@@ -1,5 +1,27 @@
 # AI Sandbox Environment Testing Framework
 
+```mermaid
+graph LR
+    A[Test Execution] --> B[Results Collection]
+    B --> C1[Environment Metrics]
+    B --> C2[Execution Metrics]
+    B --> C3[Status Metrics]
+    B --> C4[Network Metrics]
+
+    C1 --> D1[Creation Times]
+    C1 --> D2[Deletion Times]
+
+    C2 --> E1[Code Execution Times]
+    C2 --> E2[Concurrency Metrics]
+
+    C3 --> F1[Success/Failure Status]
+    C3 --> F2[Error Messages]
+
+    C4 --> G1[Latency]
+    C4 --> G2[Bandwidth]
+    C4 --> G3[Route Stability]
+```
+
 ## Core Metrics
 
 ### 1. Speed/Performance
