@@ -168,7 +168,22 @@ class SandboxExecutor:
 
 class ResultsVisualizer:
     @staticmethod
-    def print_detailed_comparison(overall_results: Dict[str, Any], tests: Dict[int, Callable], measurement_runs: int):
+    def print_summary_info(warmup_runs: int, measurement_runs: int, tests: dict, providers: list):
+        print("\n" + "="*80)
+        print("Test Configuration Summary".center(80))
+        print("="*80)
+        print(f"Warmup Runs: {warmup_runs}")
+        print(f"Measurement Runs: {measurement_runs}")
+        print(f"Tests Used ({len(tests)}): {', '.join(f'{tid}:{func.__name__}' for tid, func in tests.items())}")
+        print(f"Providers Used: {', '.join(providers)}")
+        print("="*80 + "\n")
+
+    @staticmethod
+    def print_detailed_comparison(overall_results: dict, tests: dict, measurement_runs: int, warmup_runs: int, providers: list):
+        # Print summary information first
+        ResultsVisualizer.print_summary_info(warmup_runs, measurement_runs, tests, providers)
+
+        # For each test print the detailed performance table
         for test_id, test_code_func in tests.items():
             print(f"\n{colored(f'Performance Comparison for Test {test_id}: {test_code_func.__name__}', 'yellow', attrs=['bold'])}")
             headers = ["Metric", "Daytona", "e2b", "CodeSandbox", "Modal"]
@@ -226,16 +241,52 @@ class ResultsVisualizer:
                     percentage_comparisons.append("N/A")
             table_data.append(["vs Daytona %"] + percentage_comparisons)
             print(tabulate(table_data, headers=headers, tablefmt="grid"))
-            for provider in ['daytona', 'e2b', 'codesandbox', 'modal']:
-                all_errors = []
+
+            # Now, print a failure summary table for this test if there were any errors.
+            fail_table = []
+            fail_headers = ["Provider", "Failed Runs (out of {})".format(measurement_runs)]
+            errors_found = False
+            for provider in ["daytona", "e2b", "codesandbox", "modal"]:
+                fail_count = 0
                 for run_num in range(1, measurement_runs + 1):
                     run_results = test_results.get(f"run_{run_num}", {})
-                    if provider in run_results and 'error' in run_results[provider] and run_results[provider]['error']:
-                        all_errors.append(run_results[provider]['error'])
-                if all_errors:
-                    print(f"\n{provider.capitalize()} Errors for Test {test_id}:")
-                    for error in all_errors:
-                        print(colored(f"- {error}", 'red'))
+                    if provider in run_results and run_results[provider].get('error', None):
+                        fail_count += 1
+                fail_table.append([provider.capitalize(), f"{fail_count}/{measurement_runs}"])
+                if fail_count > 0:
+                    errors_found = True
+
+            if errors_found:
+                print("\n" + colored("Failure Summary for Test {}: {}".format(test_id, test_code_func.__name__), 'red', attrs=['bold']))
+                print(tabulate(fail_table, headers=fail_headers, tablefmt="grid"))
+            else:
+                print("\nNo failures recorded for this test.")
+
+# --- In the main() function, update the invocation of print_detailed_comparison ---
+
+async def main(args):
+    executor_obj = SandboxExecutor(warmup_runs=args.warmup_runs, measurement_runs=args.runs, num_concurrent_providers=4)
+
+    tests_to_run = {}
+    if args.tests == "all":
+        tests_to_run = defined_tests
+    else:
+        for test_id in map(int, args.tests.split(',')):
+            if test_id in defined_tests:
+                tests_to_run[test_id] = defined_tests[test_id]
+            else:
+                logger.warning(f"Test ID {test_id} not found and will be skipped.")
+
+    providers_to_run = args.providers.split(',')
+
+    try:
+        overall_results = await executor_obj.run_comparison(tests_to_run, providers_to_run, args.runs, args.target_region)
+        visualizer = ResultsVisualizer()
+        # Now pass args.warmup_runs as well as the providers list to the visualizer.
+        visualizer.print_detailed_comparison(overall_results, tests_to_run, args.runs, args.warmup_runs, providers_to_run)
+    except Exception as e:
+        logger.error(f"Error during execution: {str(e)}")
+        raise
 
 
 async def main(args):
@@ -273,7 +324,7 @@ if __name__ == "__main__":
     parser.add_argument('--warmup-runs', '-w', type=int, default=1,
                         help='Number of warmup runs. Default: 1')
     parser.add_argument('--target-region', type=str, default='eu',
-                        help='Daytona target region (eu, us, asia). Default: eu')
+                        help='Target region (eu, us, asia). Default: eu')
 
     args = parser.parse_args()
     if args.tests != "all":

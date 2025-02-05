@@ -13,7 +13,7 @@ async def execute(code: str):
         response = requests.post(
             'http://localhost:3000/execute',
             json={'code': code},
-            timeout=30
+            timeout=60
         )
         logger.info(f"CodeSandbox response status: {response.status_code}")
         response.raise_for_status()
