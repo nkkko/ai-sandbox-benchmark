@@ -169,26 +169,36 @@ class SandboxExecutor:
 class ResultsVisualizer:
     @staticmethod
     def print_summary_info(warmup_runs: int, measurement_runs: int, tests: dict, providers: list):
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("Test Configuration Summary".center(80))
-        print("="*80)
+        print("=" * 80)
         print(f"Warmup Runs: {warmup_runs}")
         print(f"Measurement Runs: {measurement_runs}")
-        print(f"Tests Used ({len(tests)}): {', '.join(f'{tid}:{func.__name__}' for tid, func in tests.items())}")
+        tests_used = ', '.join(f"{tid}:{func.__name__}" for tid, func in tests.items())
+        print(f"Tests Used ({len(tests)}): {tests_used}")
         print(f"Providers Used: {', '.join(providers)}")
-        print("="*80 + "\n")
+        print("=" * 80 + "\n")
 
     @staticmethod
-    def print_detailed_comparison(overall_results: dict, tests: dict, measurement_runs: int, warmup_runs: int, providers: list):
-        # Print summary information first
+    def print_detailed_comparison(
+            overall_results: dict,
+            tests: dict,
+            measurement_runs: int,
+            warmup_runs: int,
+            providers: list
+        ):
+        # Print overall configuration details.
         ResultsVisualizer.print_summary_info(warmup_runs, measurement_runs, tests, providers)
 
-        # For each test print the detailed performance table
+        # Iterate over each test.
         for test_id, test_code_func in tests.items():
             print(f"\n{colored(f'Performance Comparison for Test {test_id}: {test_code_func.__name__}', 'yellow', attrs=['bold'])}")
+
             headers = ["Metric", "Daytona", "e2b", "CodeSandbox", "Modal"]
             table_data = []
             test_results = overall_results.get(f"test_{test_id}", {})
+
+            # Optionally, print out an example output from the first available provider.
             first_run_results = test_results.get("run_1", {})
             first_provider_output = None
             for provider in ["daytona", "e2b", "codesandbox", "modal"]:
@@ -197,6 +207,8 @@ class ResultsVisualizer:
                     break
             if first_provider_output:
                 print(f"\nExample Output (from first run, first available provider):\n{first_provider_output}")
+
+            # Build the main metrics table.
             for metric in ["Workspace Creation", "Code Execution", "Cleanup"]:
                 row = [metric]
                 for provider in ["daytona", "e2b", "codesandbox", "modal"]:
@@ -208,27 +220,31 @@ class ResultsVisualizer:
                             if run_metric:
                                 all_runs_metrics.append(run_metric['mean'])
                     if all_runs_metrics:
-                        avg_metric_mean = np.mean(all_runs_metrics)
-                        std_metric_mean = np.std(all_runs_metrics)
-                        row.append(f"{avg_metric_mean:.2f}ms (±{std_metric_mean:.2f})")
+                        avg_metric = np.mean(all_runs_metrics)
+                        std_metric = np.std(all_runs_metrics)
+                        row.append(f"{avg_metric:.2f}ms (±{std_metric:.2f})")
                     else:
                         row.append("N/A")
                 table_data.append(row)
+
+            # Compute and display the total time row.
             row = ["Total Time"]
             platform_totals = {}
             for provider in ["daytona", "e2b", "codesandbox", "modal"]:
-                total_times_for_provider = []
+                total_times = []
                 for run_num in range(1, measurement_runs + 1):
                     run_results = test_results.get(f"run_{run_num}", {})
                     if provider in run_results:
-                        total_times_for_provider.append(run_results[provider]['metrics'].get_total_time())
-                if total_times_for_provider:
-                    platform_total = np.mean(total_times_for_provider)
-                    platform_totals[provider] = platform_total
-                    row.append(f"{platform_total:.2f}ms")
+                        total_times.append(run_results[provider]['metrics'].get_total_time())
+                if total_times:
+                    provider_total = np.mean(total_times)
+                    platform_totals[provider] = provider_total
+                    row.append(f"{provider_total:.2f}ms")
                 else:
                     row.append("N/A")
             table_data.append(row)
+
+            # Compute comparisons versus Daytona.
             daytona_total = platform_totals.get('daytona', 0)
             percentage_comparisons = []
             for provider in ["daytona", "e2b", "codesandbox", "modal"]:
@@ -240,9 +256,11 @@ class ResultsVisualizer:
                 else:
                     percentage_comparisons.append("N/A")
             table_data.append(["vs Daytona %"] + percentage_comparisons)
+
+            # Print out the main metrics table.
             print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
-            # Now, print a failure summary table for this test if there were any errors.
+            # Build the failure summary table.
             fail_table = []
             fail_headers = ["Provider", "Failed Runs (out of {})".format(measurement_runs)]
             errors_found = False
@@ -250,19 +268,18 @@ class ResultsVisualizer:
                 fail_count = 0
                 for run_num in range(1, measurement_runs + 1):
                     run_results = test_results.get(f"run_{run_num}", {})
-                    if provider in run_results and run_results[provider].get('error', None):
+                    if provider in run_results and run_results[provider].get('error'):
                         fail_count += 1
                 fail_table.append([provider.capitalize(), f"{fail_count}/{measurement_runs}"])
                 if fail_count > 0:
                     errors_found = True
 
             if errors_found:
-                print("\n" + colored("Failure Summary for Test {}: {}".format(test_id, test_code_func.__name__), 'red', attrs=['bold']))
+                print("\n" + colored(f"Failure Summary for Test {test_id}: {test_code_func.__name__}", 'red', attrs=['bold']))
                 print(tabulate(fail_table, headers=fail_headers, tablefmt="grid"))
             else:
                 print("\nNo failures recorded for this test.")
 
-# --- In the main() function, update the invocation of print_detailed_comparison ---
 
 async def main(args):
     executor_obj = SandboxExecutor(warmup_runs=args.warmup_runs, measurement_runs=args.runs, num_concurrent_providers=4)
@@ -282,32 +299,8 @@ async def main(args):
     try:
         overall_results = await executor_obj.run_comparison(tests_to_run, providers_to_run, args.runs, args.target_region)
         visualizer = ResultsVisualizer()
-        # Now pass args.warmup_runs as well as the providers list to the visualizer.
+        # Passing measurement_runs, warmup_runs and providers list
         visualizer.print_detailed_comparison(overall_results, tests_to_run, args.runs, args.warmup_runs, providers_to_run)
-    except Exception as e:
-        logger.error(f"Error during execution: {str(e)}")
-        raise
-
-
-async def main(args):
-    executor_obj = SandboxExecutor(warmup_runs=args.warmup_runs, measurement_runs=args.runs, num_concurrent_providers=4)
-
-    tests_to_run = {}
-    if args.tests == "all":
-        tests_to_run = defined_tests
-    else:
-        for test_id in map(int, args.tests.split(',')):
-            if test_id in defined_tests:
-                tests_to_run[test_id] = defined_tests[test_id]
-            else:
-                logger.warning(f"Test ID {test_id} not found and will be skipped.")
-
-    providers_to_run = args.providers.split(',')
-
-    try:
-        overall_results = await executor_obj.run_comparison(tests_to_run, providers_to_run, args.runs, args.target_region)
-        visualizer = ResultsVisualizer()
-        visualizer.print_detailed_comparison(overall_results, tests_to_run, args.runs)
     except Exception as e:
         logger.error(f"Error during execution: {str(e)}")
         raise
