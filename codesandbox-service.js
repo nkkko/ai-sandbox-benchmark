@@ -53,8 +53,7 @@ app.post('/execute', async (req, res) => {
 
     const startTime = Date.now();
     const metrics = {
-        initialization: 0,
-        workspaceCreation: 0,
+        workspaceCreation: 0, // Renamed from initialization to workspaceCreation for consistency with Python script
         codeExecution: 0,
         cleanup: 0
     };
@@ -62,26 +61,23 @@ app.post('/execute', async (req, res) => {
     let sandbox = null;
 
     try {
-        log(`[${requestId}] Initializing execution environment`);
-        metrics.initialization = Date.now() - startTime;
-
         const createStart = Date.now();
         log(`[${requestId}] Creating sandbox instance`);
         sandbox = await sdk.sandbox.create();
-        metrics.workspaceCreation = Date.now() - createStart;
+        metrics.workspaceCreation = Date.now() - createStart; // Measure workspace creation time
         log(`[${requestId}] Sandbox created successfully in ${metrics.workspaceCreation}ms`);
 
         const execStart = Date.now();
         log(`[${requestId}] Executing code in sandbox`);
         const result = await sandbox.shells.python.run(code);
-        metrics.codeExecution = Date.now() - execStart;
+        metrics.codeExecution = Date.now() - execStart; // Measure code execution time
         log(`[${requestId}] Code execution completed in ${metrics.codeExecution}ms`);
         log(`[${requestId}] Execution output: ${JSON.stringify(result.output)}`);
 
         const cleanupStart = Date.now();
         log(`[${requestId}] Starting sandbox cleanup`);
         await sandbox.hibernate();
-        metrics.cleanup = Date.now() - cleanupStart;
+        metrics.cleanup = Date.now() - cleanupStart; // Measure cleanup time
         log(`[${requestId}] Cleanup completed in ${metrics.cleanup}ms`);
 
         const totalTime = Date.now() - startTime;
@@ -102,8 +98,10 @@ app.post('/execute', async (req, res) => {
         if (sandbox) {
             try {
                 log(`[${requestId}] Attempting cleanup after error`);
+                const cleanupStart = Date.now();
                 await sandbox.hibernate();
-                log(`[${requestId}] Cleanup after error successful`);
+                metrics.cleanup = Date.now() - cleanupStart; // Measure cleanup time even in error case
+                log(`[${requestId}] Cleanup after error successful in ${metrics.cleanup}ms`);
             } catch (cleanupError) {
                 log(`[${requestId}] Cleanup after error failed: ${cleanupError.message}`, 'error');
             }

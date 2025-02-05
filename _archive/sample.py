@@ -1,4 +1,5 @@
 import daytona_sdk
+import os
 
 daytona = daytona_sdk.Daytona(
     config=daytona_sdk.DaytonaConfig(
@@ -8,7 +9,13 @@ daytona = daytona_sdk.Daytona(
     )
 )
 
-workspace = daytona.create()
+params = daytona_sdk.CreateWorkspaceParams(
+    image="jupyter/scipy-notebook",
+    language="python",
+    region="us-west-2"
+)
+
+workspace = daytona.create(params=params)
 
 code = """
 print("Sum of 3 and 4 is " + str(3 + 4))
