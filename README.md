@@ -1,133 +1,227 @@
-# SDK Playground and Comparison
+# Sandbox Comparator
 
-A comprehensive toolkit for testing and benchmarking different code execution sandboxes, including Daytona, e2b, CodeSandbox, and Modal.
+Welcome to **Sandbox Comparator** – an open-source, standardized benchmarking framework designed to evaluate and compare various code execution sandbox environments like Daytona, e2b, CodeSandbox, Modal, and others.
 
-## Overview
+Whether you're a developer looking to choose the best sandbox for your projects or a contributor aiming to enhance the benchmarking suite, this project is for you!
 
-This project provides tools to:
-- Generate code using LangChain and OpenAI
-- Execute code in multiple sandbox environments:
-  - Daytona
-  - e2b
-  - CodeSandbox
-  - Modal
-- Compare performance metrics between different sandbox environments
-- Visualize execution results and timing statistics
+## 🚀 Get Involved
 
-## Requirements
+We invite developers, testers, and enthusiasts to contribute by adding new tests or integrating additional sandbox providers. Your contributions help make Sandbox Comparator a comprehensive and reliable tool for the community.
 
-- Python 3.8+
-- Node.js (for CodeSandbox service)
-- Required API keys:
-  - OpenAI API key
-  - Daytona API key and server URL
-  - e2b environment setup
-  - CodeSandbox API key
-  - Modal setup
+**How to Contribute:**
+- **Add New Tests:** Extend the test suite with new scenarios to evaluate sandbox performance.
+- **Integrate Providers:** Connect additional sandbox environments to broaden the comparison scope.
+- **Improve Documentation:** Help enhance the clarity and usability of the project guides.
 
-## Installation
+Check out the [Contributing Guidelines](#contributing) below to get started!
 
-1. Clone the repository:
-```bash
-git clone https://github.com/nkkko/sdk-play.git
-cd sdk-play
+## 📁 Project Structure
+
+```
+sandbox-comparator
+├── SPECIFICATION.md
+├── metrics.py
+├── comparator.py
+├── requirements.txt
+├── providers
+│   ├── daytona.py
+│   ├── codesandbox.py
+│   ├── __init__.py
+│   ├── e2b.py
+│   ├── modal.py
+│   └── codesandbox-service.js
+├── tests
+│   ├── test_list_directory.py
+│   ├── test_calculate_primes.py
+│   ├── __init__.py
+│   ├── test_llm_generated_primes.py
+│   └── test_resource_intensive_calculation.py
+└── README.md
 ```
 
-2. Install Python dependencies:
+## 🛠 Installation
+
+### Prerequisites
+
+- **Python 3.8+**
+- **Node.js** (for CodeSandbox service)
+- **Git**
+
+### Steps
+
+1. **Clone the Repository**
+
+   ```bash
+   git clone https://github.com/nkkko/sandbox-comparator.git
+   cd sandbox-comparator
+   ```
+
+2. **Set Up a Virtual Environment (Optional but Recommended)**
+
+   ```bash
+   python -m venv venv
+   source venv/bin/activate
+   ```
+
+3. **Install Python Dependencies**
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Install Node.js Dependencies (for CodeSandbox Service)**
+
+   Navigate to the `providers` directory and install dependencies:
+
+   ```bash
+   cd providers
+   npm install
+   cd ..
+   ```
+
+5. **Configure Environment Variables**
+
+   Create a `.env` file in the root directory with the necessary API keys:
+
+   ```env
+   OPENAI_API_KEY=your_openai_api_key
+   DAYTONA_API_KEY=your_daytona_api_key
+   DAYTONA_SERVER_URL=your_daytona_server_url
+   CSB_API_KEY=your_codesandbox_api_key
+   ```
+
+## 🏃 Usage
+
+### Start the CodeSandbox Service
+
+Before running benchmarks, ensure the CodeSandbox service is active (currently no Python SDK):
+
 ```bash
-pip install -r requirements.txt
-```
-
-3. Install Node.js dependencies (for CodeSandbox service):
-```bash
-npm install
-```
-
-4. Create a `.env` file with your credentials:
-```env
-OPENAI_API_KEY=your_openai_api_key
-DAYTONA_API_KEY=your_daytona_api_key
-DAYTONA_SERVER_URL=your_daytona_server_url
-CSB_API_KEY=your_codesandbox_api_key
-E2B_API_KEY=your_e2b_key
-```
-
-## Project Structure
-
-- `comparison_4.py` - Latest version with Modal integration
-- `comparison_3.py` - Previous version with CodeSandbox integration
-- `comparison_stats.py` - Statistical analysis tools
-- `comparison.py` - Basic comparison between sandboxes
-- `daytona_example.py` - Standalone Daytona example
-- `e2b_example.py` - Standalone e2b example
-- `modaltest.py` - Modal sandbox testing
-- `codesandbox-service.js` - CodeSandbox wrapper service
-
-## Usage
-
-### Running the CodeSandbox Service
-Start the CodeSandbox wrapper service:
-```bash
+cd providers
 node codesandbox-service.js
 ```
 
-### Running Comparisons
+### Run Benchmarks
+
+Execute the comparator script to start benchmarking:
+
 ```bash
-# Full comparison (all sandboxes)
-python comparison_4.py
-
-# Previous version (without Modal)
-python comparison_3.py
-
-# Basic comparison
-python comparison.py
+python comparator.py
 ```
 
-### Individual Sandbox Testing
-```bash
-python daytona_example.py
-python e2b_example.py
-python modaltest.py
-```
+#### Available Options
 
-## Features
+- `--tests` or `-t`: Comma-separated list of test IDs to run (or `"all"`).
+  **Default:** `all`
 
-- Code generation using LangChain and OpenAI
-- Comprehensive sandbox execution timing metrics
-- Colored console output
-- Syntax highlighting for generated code
-- Tabulated performance comparisons
-- Statistical analysis of execution times
-- Error handling and reporting
-- Logging system
+- `--providers` or `-p`: Comma-separated list of providers to test.
+  **Default:** `daytona,e2b,codesandbox,modal`
 
-## Measured Metrics
+- `--runs` or `-r`: Number of measurement runs per test/provider.
+  **Default:** `10`
 
-For each sandbox environment, the following metrics are collected:
-- Initialization time
-- Workspace creation time
-- Code execution time
-- Cleanup time
-- Total execution time
-- Statistical variations (mean, standard deviation, min, max)
+- `--warmup-runs` or `-w`: Number of warmup runs.
+  **Default:** `1`
 
-## Contributing
+- `--target-region`: Target region (e.g., `eu`, `us`, `asia`).
+  **Default:** `eu`
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+#### Examples
 
-## License
+- **Run All Tests on All Providers**
 
-Apache 2.0
+  ```bash
+  python comparator.py
+  ```
 
-## Credits
+- **Run Specific Tests on Selected Providers**
 
-- Daytona SDK
-- e2b Code Interpreter
-- CodeSandbox SDK
-- Modal
-- LangChain
-- OpenAI
+  ```bash
+  python comparator.py --tests 1,3 --providers daytona,codesandbox
+  ```
+
+- **Increase Measurement and Warmup Runs**
+
+  ```bash
+  python comparator.py --runs 20 --warmup-runs 2
+  ```
+
+## 📈 Metrics
+
+Currently, Sandbox Comparator focuses on executing standardized tests across different sandbox providers and collecting basic performance metrics such as workspace creation time, code execution time, and cleanup time.
+
+**Planned Enhancements:**
+- Comprehensive network performance metrics
+- Enhanced reliability tracking
+- Advanced statistical analysis
+
+Stay tuned for updates as we continue to expand the benchmarking capabilities!
+
+## 🤝 Contributing
+
+We welcome contributions from the community! Here's how you can help:
+
+1. **Fork the Repository**
+
+   Click the "Fork" button at the top right of the repository page to create your own fork.
+
+2. **Clone Your Fork**
+
+   ```bash
+   git clone https://github.com/yourusername/sandbox-comparator.git
+   cd sandbox-comparator
+   ```
+
+3. **Create a New Branch**
+
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+4. **Make Your Changes**
+
+   - Add new tests in the `tests/` directory.
+   - Integrate new providers in the `providers/` directory.
+   - Update documentation as needed.
+
+5. **Commit Your Changes**
+
+   ```bash
+   git commit -m "Add your descriptive commit message"
+   ```
+
+6. **Push to Your Fork**
+
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+7. **Open a Pull Request**
+
+   Go to the original repository and create a pull request from your forked branch.
+
+**Please ensure your contributions adhere to the existing code style and include relevant tests where applicable.**
+
+## 📄 License
+
+This project is licensed under the [Apache 2.0 License](LICENSE).
+
+## 🙏 Credits
+
+- **Sandbox Providers:**
+  - [Daytona SDK](https://daytona.io/)
+  - [e2b Code Interpreter](https://e2b.io/)
+  - [CodeSandbox SDK](https://codesandbox.io/)
+  - [Modal](https://modal.com/)
+
+- **Libraries and Tools:**
+  - [LangChain](https://langchain.com/)
+  - [OpenAI](https://openai.com/)
+  - [NumPy](https://numpy.org/)
+  - [Tabulate](https://github.com/astanin/python-tabulate)
+  - [Dotenv](https://github.com/theskumar/python-dotenv)
+  - [Termcolor](https://pypi.org/project/termcolor/)
+
+---
+
+*Join us in building a robust benchmarking tool for sandbox environments. Your participation makes a difference!*
