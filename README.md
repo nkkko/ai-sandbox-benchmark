@@ -1,12 +1,12 @@
 # AI Sandbox Benchmark
 
-Welcome to **Sandbox Comparator** – an open-source, standardized benchmarking framework designed to evaluate and compare various code execution sandbox environments like Daytona, e2b, CodeSandbox, Modal, and others.
+Welcome to **AI Sandbox Benchmark** – an open-source, standardized benchmarking framework designed to evaluate and compare various code execution sandbox environments like Daytona, e2b, CodeSandbox, Modal, and others.
 
 Whether you're a developer looking to choose the best sandbox for your projects or a contributor aiming to enhance the benchmarking suite, this project is for you!
 
 ## 🚀 Get Involved
 
-We invite developers, testers, and enthusiasts to contribute by adding new tests or integrating additional sandbox providers. Your contributions help make Sandbox Comparator a comprehensive and reliable tool for the community.
+We invite developers, testers, and enthusiasts to contribute by adding new tests or integrating additional sandbox providers. Your contributions help make AI Sandbox Benchmark a comprehensive and reliable tool for the community.
 
 **How to Contribute:**
 - **Add New Tests:** Extend the test suite with new scenarios to evaluate sandbox performance.
@@ -18,7 +18,7 @@ Check out the [Contributing Guidelines](#contributing) below to get started!
 ## 📁 Project Structure
 
 ```
-sandbox-comparator
+ai-sandbox-benchmark
 ├── SPECIFICATION.md
 ├── metrics.py
 ├── comparator.py
@@ -52,8 +52,8 @@ sandbox-comparator
 1. **Clone the Repository**
 
    ```bash
-   git clone https://github.com/nkkko/sandbox-comparator.git
-   cd sandbox-comparator
+   git clone https://github.com/nkkko/ai-sandbox-benchmark.git
+   cd ai-sandbox-benchmark
    ```
 
 2. **Set Up a Virtual Environment (Optional but Recommended)**
