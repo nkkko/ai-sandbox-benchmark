@@ -1,4 +1,4 @@
-# Sandbox Comparator
+# AI Sandbox Benchmark
 
 Welcome to **Sandbox Comparator** – an open-source, standardized benchmarking framework designed to evaluate and compare various code execution sandbox environments like Daytona, e2b, CodeSandbox, Modal, and others.
 
