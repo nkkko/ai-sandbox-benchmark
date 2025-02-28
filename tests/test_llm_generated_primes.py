@@ -8,12 +8,10 @@ from langchain.prompts import PromptTemplate
 GENERATED_CODE = None
 
 def test_llm_generated_calculate_primes():
-    """
-    Generates Python code to calculate the first 10 prime numbers,
-    compute their sum and average, and print the results with
-    appropriate formatting. The code is generated once and reused
-    across multiple test executions.
-    """
+    # Generates Python code to calculate the first 10 prime numbers,
+    # compute their sum and average, and print the results with
+    # appropriate formatting. The code is generated once and reused
+    # across multiple test executions.
     global GENERATED_CODE
     if GENERATED_CODE is None:
         task = """Write a Python program that:

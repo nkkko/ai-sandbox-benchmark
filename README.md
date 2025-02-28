@@ -22,6 +22,7 @@ ai-sandbox-benchmark
 ├── SPECIFICATION.md
 ├── metrics.py
 ├── comparator.py
+├── benchmark.py     # Terminal UI for benchmarking
 ├── requirements.txt
 ├── providers
 │   ├── daytona.py
@@ -94,19 +95,42 @@ ai-sandbox-benchmark
 
 ### Start the CodeSandbox Service
 
-Before running benchmarks, ensure the CodeSandbox service is active (currently no Python SDK):
+Before running benchmarks with CodeSandbox, ensure the CodeSandbox service is active:
 
 ```bash
-cd providers
-node codesandbox-service.js
+node providers/codesandbox-service.js
 ```
 
 ### Run Benchmarks
 
-Execute the comparator script to start benchmarking:
+You can run benchmarks using either the command-line interface or the interactive Terminal UI.
+
+#### 1. Terminal User Interface (Recommended)
+
+The benchmark TUI provides an interactive way to select tests and providers:
+
+```bash
+python benchmark.py
+```
+
+Navigate the interface with:
+- Arrow keys to move
+- Space to toggle selections
+- Enter to confirm/run
+- 'q' to exit
+
+#### 2. Command-Line Interface
+
+Execute the comparator script directly for command-line benchmarking:
 
 ```bash
 python comparator.py
+```
+
+To use the CLI mode with the TUI script:
+
+```bash
+python benchmark.py --cli
 ```
 
 #### Available Options
@@ -145,6 +169,34 @@ python comparator.py
   ```bash
   python comparator.py --runs 20 --warmup-runs 2
   ```
+
+### Parallel Provider Testing
+
+The benchmark suite now runs tests on all selected providers in parallel, significantly reducing overall benchmark time. Each test will be executed on all providers simultaneously, rather than waiting for each provider to finish before moving to the next one.
+
+## 🖥️ Terminal UI
+
+The benchmark tool includes a full-featured Terminal User Interface (TUI) that makes it easy to:
+- Select specific tests to run
+- Choose which providers to benchmark
+- Configure runs and warmup settings
+- View results in formatted tables
+
+To launch the TUI:
+```bash
+python benchmark.py
+```
+
+## ✨ Features
+
+- **Parallel Provider Execution**: Tests run simultaneously across all selected providers
+- **Interactive TUI**: User-friendly terminal interface for selecting tests and providers
+- **WCAG-Compliant Interface**: High-contrast, accessible terminal UI
+- **Automated CodeSandbox Detection**: Warns if CodeSandbox service is not running
+- **Flexible Test Configuration**: Run any combination of tests and providers
+- **Comprehensive Metrics**: Detailed timing for workspace creation, execution, and cleanup
+- **Statistical Analysis**: Mean, standard deviation, and relative performance comparisons
+- **Warmup Runs**: Configurable warmup runs to ensure stable measurements
 
 ## 📈 Metrics
 
@@ -219,8 +271,10 @@ This project is licensed under the [Apache 2.0 License](LICENSE).
   - [OpenAI](https://openai.com/)
   - [NumPy](https://numpy.org/)
   - [Tabulate](https://github.com/astanin/python-tabulate)
+  - [Curses](https://docs.python.org/3/library/curses.html) (Terminal UI)
   - [Dotenv](https://github.com/theskumar/python-dotenv)
   - [Termcolor](https://pypi.org/project/termcolor/)
+  - [Requests](https://requests.readthedocs.io/)
 
 ---
 

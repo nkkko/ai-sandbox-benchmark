@@ -15,12 +15,12 @@ NUM_FILES = 5  # Number of files per size
 CONCURRENT_OPERATIONS = 3  # Number of concurrent file operations
 
 def generate_random_data(size_mb):
-    """Generate random string data of specified size in MB"""
+    # Generate random string data of specified size in MB
     # Generate random bytes (1 MB = 1,048,576 bytes)
     return os.urandom(size_mb * 1024 * 1024)
 
 def write_binary_file(file_path, data):
-    """Write binary data to a file and measure performance"""
+    # Write binary data to a file and measure performance
     start_time = time.time()
     with open(file_path, 'wb') as f:
         f.write(data)
@@ -28,7 +28,7 @@ def write_binary_file(file_path, data):
     return elapsed, len(data)
 
 def read_binary_file(file_path):
-    """Read binary data from a file and measure performance"""
+    # Read binary data from a file and measure performance
     start_time = time.time()
     with open(file_path, 'rb') as f:
         data = f.read()
@@ -36,7 +36,7 @@ def read_binary_file(file_path):
     return elapsed, len(data)
 
 def write_json_file(file_path, num_records):
-    """Generate and write JSON data to a file"""
+    # Generate and write JSON data to a file
     # Create sample data
     data = []
     for i in range(num_records):
@@ -62,7 +62,7 @@ def write_json_file(file_path, num_records):
     return elapsed, len(data)
 
 def read_json_file(file_path):
-    """Read and parse JSON data from a file"""
+    # Read and parse JSON data from a file
     start_time = time.time()
     with open(file_path, 'r') as f:
         data = json.load(f)
@@ -71,7 +71,7 @@ def read_json_file(file_path):
     return elapsed, len(data)
 
 def write_csv_file(file_path, num_records):
-    """Generate and write CSV data to a file"""
+    # Generate and write CSV data to a file
     # Create sample data
     headers = ['id', 'name', 'value', 'category', 'active']
     rows = []
@@ -96,7 +96,7 @@ def write_csv_file(file_path, num_records):
     return elapsed, len(rows)
 
 def read_csv_file(file_path):
-    """Read and parse CSV data from a file"""
+    # Read and parse CSV data from a file
     start_time = time.time()
     rows = []
     with open(file_path, 'r', newline='') as f:
@@ -109,7 +109,7 @@ def read_csv_file(file_path):
     return elapsed, len(rows)
 
 def concurrent_file_operations(operation_func, file_paths):
-    """Run file operations concurrently"""
+    # Run file operations concurrently
     results = []
     with ThreadPoolExecutor(max_workers=CONCURRENT_OPERATIONS) as executor:
         future_to_file = {executor.submit(operation_func, file_path): file_path for file_path in file_paths}
@@ -122,7 +122,7 @@ def concurrent_file_operations(operation_func, file_paths):
     return results
 
 def run_file_io_tests():
-    """Run all file I/O performance tests"""
+    # Run all file I/O performance tests
     results = {
         'binary': {'write': {}, 'read': {}},
         'json': {'write': {}, 'read': {}},

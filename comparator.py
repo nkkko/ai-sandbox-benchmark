@@ -15,7 +15,7 @@ from typing import Dict, Any, Callable, List, Tuple
 import requests
 
 # Import EnhancedTimingMetrics from metrics instead of from comparator (avoids circular dependency)
-from metrics import EnhancedTimingMetrics
+from metrics import EnhancedTimingMetrics, BenchmarkHistory
 
 # Dynamically import all modules in the tests directory
 TESTS_DIR = 'tests'
@@ -85,11 +85,21 @@ class EnhancedTimingMetrics:
 
 class SandboxExecutor:
     def __init__(self, warmup_runs: int = 1, measurement_runs: int = 10, num_concurrent_providers: int = 4):
+        """Initialize the SandboxExecutor.
+        
+        Args:
+            warmup_runs: Number of warmup runs to perform before measurement
+            measurement_runs: Number of measurement runs to perform
+            num_concurrent_providers: Number of providers to run in parallel
+        """
         self.warmup_runs = warmup_runs
         self.measurement_runs = measurement_runs
         self.num_concurrent_providers = num_concurrent_providers
         load_dotenv()
         self._validate_environment()
+        
+        logger.info(f"Initialized SandboxExecutor with {num_concurrent_providers} concurrent providers, "
+                   f"{warmup_runs} warmup runs, and {measurement_runs} measurement runs")
 
     def _validate_environment(self):
         required_vars = {
@@ -141,68 +151,131 @@ class SandboxExecutor:
             test_names = ", ".join([f"{test_id}:{func.__name__}" for test_id, func in single_run_tests.items()])
             logger.info(f"The following tests will only run once (ignoring measurement_runs): {test_names}")
 
-        logger.info("Performing warmup runs...")
-        for i in range(self.warmup_runs):
-            logger.info(f"Warmup run {i+1}/{self.warmup_runs}")
-            # Only do warmup runs for multi-run tests
-            for test_id, test_code_func in multi_run_tests.items():
-                for provider in providers:
-                    async with asyncio.Semaphore(self.num_concurrent_providers):
-                        with ThreadPoolExecutor(max_workers=self.num_concurrent_providers) as executor:
-                            await self.run_test_on_provider(test_code_func, provider, executor, target_region)
-
-        # Process single-run tests first (one run only)
-        if single_run_tests:
-            logger.info("Performing single-run tests...")
-            for test_id, test_code_func in single_run_tests.items():
-                logger.info(f"Running test {test_id}: {test_code_func.__name__} (single run)")
-                test_results = overall_results.setdefault(f"test_{test_id}", {})
-                run_results = test_results.setdefault("run_1", {})
-
-                measurement_tasks = []
-                with ThreadPoolExecutor(max_workers=self.num_concurrent_providers) as executor:
-                    for provider in providers:
-                        task = asyncio.create_task(self.run_test_on_provider(test_code_func, provider, executor, target_region))
-                        measurement_tasks.append(task)
-
-                    provider_run_results = await asyncio.gather(*measurement_tasks, return_exceptions=True)
-                    for i, provider_result in enumerate(provider_run_results):
-                        provider = providers[i]
-                        if isinstance(provider_result, Exception):
-                            logger.error(f"Test {test_id}: Failed to execute {provider}: {str(provider_result)}")
-                            run_results[provider] = {'metrics': EnhancedTimingMetrics(), 'output': None, 'error': str(provider_result)}
-                        else:
-                            p_name, p_results, error = provider_result
-                            run_results[p_name] = p_results
-                            if error:
-                                run_results[p_name]['error'] = str(error)
-
-        # Process multi-run tests
-        if multi_run_tests:
-            logger.info(f"Performing {measurement_runs} measurement runs for standard tests...")
-            for run in range(measurement_runs):
-                logger.info(f"Measurement run {run+1}/{measurement_runs}")
-                for test_id, test_code_func in multi_run_tests.items():
-                    test_results = overall_results.setdefault(f"test_{test_id}", {})
-                    run_results = test_results.setdefault(f"run_{run+1}", {})
-
-                    measurement_tasks = []
-                    with ThreadPoolExecutor(max_workers=self.num_concurrent_providers) as executor:
+        # Run warmups fully in parallel across both providers and tests
+        if self.warmup_runs > 0:
+            logger.info(f"Performing {self.warmup_runs} warmup runs in parallel...")
+            
+            # Create a shared thread pool executor for all warmup runs
+            with ThreadPoolExecutor(max_workers=self.num_concurrent_providers * len(providers)) as executor:
+                warmup_tasks = []
+                
+                for i in range(self.warmup_runs):
+                    # Only do warmup runs for multi-run tests
+                    for test_id, test_code_func in multi_run_tests.items():
                         for provider in providers:
-                            task = asyncio.create_task(self.run_test_on_provider(test_code_func, provider, executor, target_region))
-                            measurement_tasks.append(task)
+                            warmup_task = asyncio.create_task(
+                                self.run_test_on_provider(test_code_func, provider, executor, target_region)
+                            )
+                            warmup_tasks.append(warmup_task)
+                
+                # Run all warmup tasks concurrently and ignore results
+                await asyncio.gather(*warmup_tasks, return_exceptions=True)
+                logger.info("Warmup runs completed")
 
-                        provider_run_results = await asyncio.gather(*measurement_tasks, return_exceptions=True)
-                        for i, provider_result in enumerate(provider_run_results):
-                            provider = providers[i]
-                            if isinstance(provider_result, Exception):
-                                logger.error(f"Run {run+1}, Test {test_id}: Failed to execute {provider}: {str(provider_result)}")
-                                run_results[provider] = {'metrics': EnhancedTimingMetrics(), 'output': None, 'error': str(provider_result)}
-                            else:
-                                p_name, p_results, error = provider_result
-                                run_results[p_name] = p_results
-                                if error:
-                                    run_results[p_name]['error'] = str(error)
+        # Global thread pool executor for all test runs
+        with ThreadPoolExecutor(max_workers=self.num_concurrent_providers * len(providers)) as executor:
+            all_test_tasks = []
+            test_task_map = {}  # Maps tasks to metadata (test_id, provider, run_num)
+            
+            # Schedule all single-run tests - PROVIDER PARALLEL
+            if single_run_tests:
+                logger.info("Scheduling single-run tests...")
+                for test_id, test_code_func in single_run_tests.items():
+                    logger.info(f"Scheduling test {test_id}: {test_code_func.__name__} (single run)")
+                    
+                    # Create tasks for all providers in parallel for this test
+                    provider_tasks = []
+                    for provider in providers:
+                        task = asyncio.create_task(
+                            self.run_test_on_provider(test_code_func, provider, executor, target_region)
+                        )
+                        provider_tasks.append(task)
+                        test_task_map[task] = {
+                            'test_id': test_id, 
+                            'provider': provider, 
+                            'run_num': 1,
+                            'is_single_run': True
+                        }
+                    
+                    all_test_tasks.extend(provider_tasks)
+            
+            # Schedule all multi-run tests - PROVIDER PARALLEL 
+            if multi_run_tests:
+                logger.info(f"Scheduling {measurement_runs} measurement runs for standard tests...")
+                for run in range(measurement_runs):
+                    run_num = run + 1
+                    for test_id, test_code_func in multi_run_tests.items():
+                        # Create tasks for all providers in parallel for this test and run
+                        provider_tasks = []
+                        for provider in providers:
+                            task = asyncio.create_task(
+                                self.run_test_on_provider(test_code_func, provider, executor, target_region)
+                            )
+                            provider_tasks.append(task)
+                            test_task_map[task] = {
+                                'test_id': test_id, 
+                                'provider': provider, 
+                                'run_num': run_num,
+                                'is_single_run': False
+                            }
+                        
+                        all_test_tasks.extend(provider_tasks)
+            
+            # Use a semaphore to limit concurrency based on the number of providers
+            # This ensures we don't exceed resource limits while still getting maximum parallelism
+            sem = asyncio.Semaphore(len(providers) * 2)  # Allow 2 tests per provider
+            
+            # Helper function to run a task with the semaphore
+            async def run_with_semaphore(task):
+                async with sem:
+                    return await task
+            
+            # Group tasks by test and run for parallel execution
+            tasks_by_test_run = {}
+            for task in all_test_tasks:
+                meta = test_task_map[task]
+                test_id = meta['test_id']
+                run_num = meta['run_num']
+                key = (test_id, run_num)
+                if key not in tasks_by_test_run:
+                    tasks_by_test_run[key] = []
+                tasks_by_test_run[key].append(task)
+            
+            # Process all tests and runs
+            all_completed_tasks = []
+            for (test_id, run_num), tasks in tasks_by_test_run.items():
+                # For each test and run, execute all provider tasks in parallel
+                logger.info(f"Executing Test {test_id}, Run {run_num} across all providers in parallel")
+                
+                # Wrap tasks with semaphore
+                semaphore_tasks = [run_with_semaphore(task) for task in tasks]
+                
+                # Execute all provider tasks for this test and run concurrently
+                provider_results = await asyncio.gather(*semaphore_tasks, return_exceptions=True)
+                
+                # Process results for this batch
+                for task, result in zip(tasks, provider_results):
+                    meta = test_task_map[task]
+                    provider = meta['provider']
+                    
+                    # Initialize results structure
+                    test_results = overall_results.setdefault(f"test_{test_id}", {})
+                    run_results = test_results.setdefault(f"run_{run_num}", {})
+                    
+                    # Process the result
+                    if isinstance(result, Exception):
+                        logger.error(f"Test {test_id}, Run {run_num}: Failed to execute {provider}: {str(result)}")
+                        run_results[provider] = {'metrics': EnhancedTimingMetrics(), 'output': None, 'error': str(result)}
+                    else:
+                        p_name, p_results, error = result
+                        run_results[p_name] = p_results
+                        if error:
+                            run_results[p_name]['error'] = str(error)
+                    
+                # Store completed tasks for return
+                all_completed_tasks.extend(provider_results)
+        
+        logger.info("All tests completed")
         return overall_results
 
 
@@ -218,6 +291,104 @@ class ResultsVisualizer:
         print(f"Tests Used ({len(tests)}): {tests_used}")
         print(f"Providers Used: {', '.join(providers)}")
         print("=" * 80 + "\n")
+        
+    @staticmethod
+    def print_historical_comparison(
+        history: BenchmarkHistory,
+        tests: Dict[int, Callable],
+        providers: List[str],
+        limit: int = 5,
+        metrics: List[str] = None
+    ):
+        """
+        Print a historical comparison of benchmark results.
+        
+        Args:
+            history: The benchmark history
+            tests: Dictionary of tests to show history for
+            providers: List of providers to compare
+            limit: Number of recent runs to include
+            metrics: Optional list of specific metrics to show (defaults to total time only)
+        """
+        if not metrics:
+            metrics = ["total_time"]  # Default to showing only total time
+            
+        print("\n" + "=" * 80)
+        print("Historical Performance Trends".center(80))
+        print("=" * 80)
+        
+        for test_id in tests.keys():
+            test_func = tests[test_id]
+            print(f"\n{colored(f'Historical Trend for Test {test_id}: {test_func.__name__}', 'blue', attrs=['bold'])}")
+            
+            # Get provider comparison
+            comparison = history.get_provider_comparison(test_id, providers, runs=limit)
+            
+            if "error" in comparison:
+                print(f"  {comparison['error']}")
+                continue
+                
+            # Print comparison table
+            if comparison["providers"]:
+                headers = ["Provider", "Avg Time (ms)", "Std Dev", "CV (%)", "Error Rate (%)", "Samples"]
+                table_data = []
+                
+                for provider, stats in comparison["providers"].items():
+                    row = [
+                        provider.capitalize(),
+                        f"{stats['avg_time']:.2f}",
+                        f"{stats['stdev']:.2f}",
+                        f"{stats['cv']:.2f}",
+                        f"{stats['error_rate']:.1f}",
+                        stats['samples']
+                    ]
+                    table_data.append(row)
+                
+                print(tabulate(table_data, headers=headers, tablefmt="grid"))
+                
+                # Print fastest and most consistent providers
+                if comparison["fastest_provider"]:
+                    print(f"\nFastest Provider: {comparison['fastest_provider'].capitalize()}")
+                if comparison["most_consistent_provider"]:
+                    print(f"Most Consistent Provider: {comparison['most_consistent_provider'].capitalize()}")
+            
+            # Show trend data for each provider
+            print(f"\nPerformance Trends (last {limit} runs):")
+            
+            for provider in providers:
+                for metric in metrics:
+                    metric_name = "Total Time" if metric == "total_time" else metric
+                    trend_data = history.get_trend_data(test_id, provider, metric, limit)
+                    
+                    if "error" in trend_data:
+                        continue  # Skip if no data for this provider and metric
+                        
+                    data_points = trend_data["data_points"]
+                    if not data_points or all(p["value"] is None for p in data_points):
+                        continue  # Skip if no valid data points
+                        
+                    print(f"\n{provider.capitalize()} - {metric_name}:")
+                    
+                    # Print trend summary
+                    if "change_percent" in trend_data:
+                        change = trend_data["change_percent"]
+                        direction = "improved" if trend_data["improved"] else "regressed"
+                        color = "green" if trend_data["improved"] else "red"
+                        print(colored(f"  {abs(change):.2f}% {direction} over last {len(data_points)} runs", color))
+                    
+                    # Print trend values
+                    values = []
+                    for point in data_points:
+                        if point["value"] is not None:
+                            timestamp = point["timestamp"].split("T")[0]  # Just show date part
+                            values.append(f"{timestamp}: {point['value']:.2f}ms")
+                    
+                    if values:
+                        print("  Recent values:")
+                        for value in values[-limit:]:  # Show only the most recent values
+                            print(f"    {value}")
+        
+        print("\n" + "=" * 80)
 
     @staticmethod
     def print_detailed_comparison(
@@ -232,79 +403,172 @@ class ResultsVisualizer:
 
         # Iterate over each test.
         for test_id, test_code_func in tests.items():
-            print(f"\n{colored(f'Performance Comparison for Test {test_id}: {test_code_func.__name__}', 'yellow', attrs=['bold'])}")
-
-            headers = ["Metric", "Daytona", "e2b", "CodeSandbox", "Modal"]
-            table_data = []
             test_results = overall_results.get(f"test_{test_id}", {})
+            
+            # Check if test is an info test (like system_info) or a performance test
+            is_info_test = hasattr(test_code_func, 'is_info_test') and test_code_func.is_info_test
+            
+            # Different header depending on test type
+            if is_info_test:
+                print(f"\n{colored(f'Information Report for Test {test_id}: {test_code_func.__name__}', 'blue', attrs=['bold'])}")
+            else:
+                print(f"\n{colored(f'Performance Comparison for Test {test_id}: {test_code_func.__name__}', 'yellow', attrs=['bold'])}")
 
-            # Optionally, print out an example output from the first available provider.
+            # Check if any of the providers succeeded in running the test
             first_run_results = test_results.get("run_1", {})
-            first_provider_output = None
-            for provider in ["daytona", "e2b", "codesandbox", "modal"]:
-                if provider in first_run_results and 'output' in first_run_results[provider]:
-                    first_provider_output = first_run_results[provider]['output']
-                    break
-            if first_provider_output:
-                print(f"\nExample Output (from first run, first available provider):\n{first_provider_output}")
+            any_output = False
 
-            # Build the main metrics table.
-            for metric in ["Workspace Creation", "Code Execution", "Cleanup"]:
-                row = [metric]
-                for provider in ["daytona", "e2b", "codesandbox", "modal"]:
-                    all_runs_metrics = []
+            # For info tests, we want to show complete output for one provider
+            if is_info_test:
+                best_provider_output = None
+                for provider in providers:  # Use the supplied provider list
+                    if provider in first_run_results and 'output' in first_run_results[provider]:
+                        output = first_run_results[provider]['output']
+                        if output:
+                            any_output = True
+                            # Select the most detailed output (longest) as the best
+                            # Handle special case for Logs objects from e2b
+                            if hasattr(output, 'stdout') and isinstance(output.stdout, list):
+                                output_str = '\n'.join(output.stdout)
+                            else:
+                                output_str = str(output)
+                                
+                            if best_provider_output is None or len(output_str) > len(str(best_provider_output[1])):
+                                best_provider_output = (provider, output_str)
+
+                if best_provider_output:
+                    print(f"\n{colored(f'System Information from {best_provider_output[0].capitalize()}:', 'green', attrs=['bold'])}")
+                    print(f"{best_provider_output[1]}")
+                    
+                    # After showing the full output, provide a comparison summary between providers
+                    print(f"\n{colored('Provider Comparison Summary:', 'yellow')}")
+                    summary_table = []
+                    
+                    # Check if each provider succeeded and report minimal info
+                    for provider in providers:
+                        if provider in first_run_results:
+                            if first_run_results[provider].get('error'):
+                                status = "Failed"
+                                details = first_run_results[provider]['error']
+                            else:
+                                status = "Success"
+                                # Try to extract OS and Python version from output if available
+                                raw_output = first_run_results[provider].get('output', '')
+                                details = "Output available"
+                                
+                                try:
+                                    # Handle Logs objects from e2b
+                                    if hasattr(raw_output, 'stdout') and isinstance(raw_output.stdout, list):
+                                        output_text = '\n'.join(raw_output.stdout)
+                                    else:
+                                        output_text = str(raw_output)
+                                    
+                                    if "OS:" in output_text and "Python:" in output_text:
+                                        os_line = [line for line in output_text.split('\n') if "OS:" in line]
+                                        py_line = [line for line in output_text.split('\n') if "Python:" in line]
+                                        if os_line and py_line:
+                                            details = f"{os_line[0].strip()}, {py_line[0].strip()}"
+                                except Exception:
+                                    # If extraction fails, just use the default message
+                                    pass
+                        else:
+                            status = "No data"
+                            details = "Test did not run"
+                        summary_table.append([provider.capitalize(), status, details])
+                    
+                    # Print comparison summary table
+                    print(tabulate(summary_table, 
+                                 headers=["Provider", "Status", "Details"], 
+                                 tablefmt="grid"))
+            else:
+                # For performance tests, show brief example output
+                first_provider_output = None
+                for provider in providers:
+                    if provider in first_run_results and 'output' in first_run_results[provider]:
+                        first_provider_output = first_run_results[provider]['output']
+                        any_output = True
+                        break
+                        
+                if first_provider_output:
+                    try:
+                        # Handle special case for Logs objects from e2b
+                        if hasattr(first_provider_output, 'stdout') and isinstance(first_provider_output.stdout, list):
+                            output_str = '\n'.join(first_provider_output.stdout)
+                        else:
+                            output_str = str(first_provider_output)
+                        
+                        # Show abbreviated output (first few lines)
+                        output_lines = output_str.split('\n')
+                        if len(output_lines) > 10:
+                            abbreviated_output = '\n'.join(output_lines[:10]) + "\n... (output truncated)"
+                        else:
+                            abbreviated_output = output_str
+                        print(f"\nExample Output (from first run, first available provider):\n{abbreviated_output}")
+                    except Exception as e:
+                        # If formatting fails, show raw output
+                        print(f"\nExample Output (from first run, first available provider):\n{first_provider_output}")
+
+                # Build the main metrics table for performance tests
+                headers = ["Metric"] + [p.capitalize() for p in providers]
+                table_data = []
+                
+                for metric in ["Workspace Creation", "Code Execution", "Cleanup"]:
+                    row = [metric]
+                    for provider in providers:
+                        all_runs_metrics = []
+                        for run_num in range(1, measurement_runs + 1):
+                            run_results = test_results.get(f"run_{run_num}", {})
+                            if provider in run_results:
+                                run_metric = run_results[provider]['metrics'].get_statistics().get(metric, {})
+                                if run_metric:
+                                    all_runs_metrics.append(run_metric['mean'])
+                        if all_runs_metrics:
+                            avg_metric = np.mean(all_runs_metrics)
+                            std_metric = np.std(all_runs_metrics)
+                            row.append(f"{avg_metric:.2f}ms (±{std_metric:.2f})")
+                        else:
+                            row.append("N/A")
+                    table_data.append(row)
+
+                # Compute and display the total time row.
+                row = ["Total Time"]
+                platform_totals = {}
+                for provider in providers:
+                    total_times = []
                     for run_num in range(1, measurement_runs + 1):
                         run_results = test_results.get(f"run_{run_num}", {})
                         if provider in run_results:
-                            run_metric = run_results[provider]['metrics'].get_statistics().get(metric, {})
-                            if run_metric:
-                                all_runs_metrics.append(run_metric['mean'])
-                    if all_runs_metrics:
-                        avg_metric = np.mean(all_runs_metrics)
-                        std_metric = np.std(all_runs_metrics)
-                        row.append(f"{avg_metric:.2f}ms (±{std_metric:.2f})")
+                            total_times.append(run_results[provider]['metrics'].get_total_time())
+                    if total_times:
+                        provider_total = np.mean(total_times)
+                        platform_totals[provider] = provider_total
+                        row.append(f"{provider_total:.2f}ms")
                     else:
                         row.append("N/A")
                 table_data.append(row)
 
-            # Compute and display the total time row.
-            row = ["Total Time"]
-            platform_totals = {}
-            for provider in ["daytona", "e2b", "codesandbox", "modal"]:
-                total_times = []
-                for run_num in range(1, measurement_runs + 1):
-                    run_results = test_results.get(f"run_{run_num}", {})
-                    if provider in run_results:
-                        total_times.append(run_results[provider]['metrics'].get_total_time())
-                if total_times:
-                    provider_total = np.mean(total_times)
-                    platform_totals[provider] = provider_total
-                    row.append(f"{provider_total:.2f}ms")
-                else:
-                    row.append("N/A")
-            table_data.append(row)
+                # Compute comparisons versus first provider.
+                first_provider = providers[0] if providers else "daytona"
+                first_provider_total = platform_totals.get(first_provider, 0)
+                percentage_comparisons = []
+                for provider in providers:
+                    if provider == first_provider or first_provider_total == 0:
+                        percentage_comparisons.append("0%")
+                    elif provider in platform_totals:
+                        diff_percentage = ((platform_totals[provider] - first_provider_total) / first_provider_total * 100)
+                        percentage_comparisons.append(f"{diff_percentage:+.1f}%")
+                    else:
+                        percentage_comparisons.append("N/A")
+                table_data.append([f"vs {first_provider.capitalize()} %"] + percentage_comparisons)
 
-            # Compute comparisons versus Daytona.
-            daytona_total = platform_totals.get('daytona', 0)
-            percentage_comparisons = []
-            for provider in ["daytona", "e2b", "codesandbox", "modal"]:
-                if provider == "daytona" or daytona_total == 0:
-                    percentage_comparisons.append("0%")
-                elif provider in platform_totals:
-                    diff_percentage = ((platform_totals[provider] - daytona_total) / daytona_total * 100)
-                    percentage_comparisons.append(f"{diff_percentage:+.1f}%")
-                else:
-                    percentage_comparisons.append("N/A")
-            table_data.append(["vs Daytona %"] + percentage_comparisons)
-
-            # Print out the main metrics table.
-            print(tabulate(table_data, headers=headers, tablefmt="grid"))
-
-            # Build the failure summary table.
+                # Print out the main metrics table.
+                print(tabulate(table_data, headers=headers, tablefmt="grid"))
+            
+            # Build the failure summary table (for any test type)
             fail_table = []
             fail_headers = ["Provider", "Failed Runs (out of {})".format(measurement_runs)]
             errors_found = False
-            for provider in ["daytona", "e2b", "codesandbox", "modal"]:
+            for provider in providers:
                 fail_count = 0
                 for run_num in range(1, measurement_runs + 1):
                     run_results = test_results.get(f"run_{run_num}", {})
@@ -322,7 +586,18 @@ class ResultsVisualizer:
 
 
 async def main(args):
-    executor_obj = SandboxExecutor(warmup_runs=args.warmup_runs, measurement_runs=args.runs, num_concurrent_providers=4)
+    # Set num_concurrent_providers to match the number of providers being tested
+    # This ensures we efficiently use resources for parallel provider execution
+    providers_to_run = args.providers.split(',')
+    num_concurrent = len(providers_to_run)
+    
+    executor_obj = SandboxExecutor(
+        warmup_runs=args.warmup_runs, 
+        measurement_runs=args.runs, 
+        num_concurrent_providers=num_concurrent
+    )
+    
+    logger.info(f"Running with {num_concurrent} provider(s) in parallel")
 
     tests_to_run = {}
     if args.tests == "all":
@@ -334,13 +609,57 @@ async def main(args):
             else:
                 logger.warning(f"Test ID {test_id} not found and will be skipped.")
 
-    providers_to_run = args.providers.split(',')
-
     try:
-        overall_results = await executor_obj.run_comparison(tests_to_run, providers_to_run, args.runs, args.target_region)
+        # Initialize benchmark history tracker with specified history file
+        history = BenchmarkHistory(args.history_file)
+
+        # Start benchmark execution
+        start_time = time.time()
+        overall_results = await executor_obj.run_comparison(
+            tests_to_run, 
+            providers_to_run, 
+            args.runs, 
+            args.target_region
+        )
+        total_time = time.time() - start_time
+        
+        logger.info(f"All benchmark tests completed in {total_time:.2f} seconds")
+        
+        # Add results to history with metadata
+        run_metadata = {
+            "total_duration": total_time,
+            "warmup_runs": args.warmup_runs,
+            "measurement_runs": args.runs,
+            "target_region": args.target_region,
+            "command_line_args": vars(args)
+        }
+        history.add_benchmark_run(
+            results=overall_results,
+            providers=providers_to_run,
+            tests=tests_to_run,
+            metadata=run_metadata
+        )
+        logger.info(f"Benchmark results saved to history file: {history.history_file}")
+        
+        # Display benchmark results
         visualizer = ResultsVisualizer()
-        # Passing measurement_runs, warmup_runs and providers list
-        visualizer.print_detailed_comparison(overall_results, tests_to_run, args.runs, args.warmup_runs, providers_to_run)
+        visualizer.print_detailed_comparison(
+            overall_results, 
+            tests_to_run, 
+            args.runs, 
+            args.warmup_runs, 
+            providers_to_run
+        )
+        
+        # Show historical comparison if enabled
+        if args.show_history and overall_results:
+            visualizer.print_historical_comparison(
+                history, 
+                tests_to_run, 
+                providers_to_run, 
+                limit=args.history_limit
+            )
+            
     except Exception as e:
         logger.error(f"Error during execution: {str(e)}")
         raise
@@ -358,6 +677,12 @@ if __name__ == "__main__":
                         help='Number of warmup runs. Default: 1')
     parser.add_argument('--target-region', type=str, default='eu',
                         help='Target region (eu, us, asia). Default: eu')
+    parser.add_argument('--show-history', action='store_true',
+                        help='Show historical comparison after benchmark')
+    parser.add_argument('--history-limit', type=int, default=5,
+                        help='Number of previous runs to include in history comparison. Default: 5')
+    parser.add_argument('--history-file', type=str, default='benchmark_history.json',
+                        help='Path to the benchmark history file. Default: benchmark_history.json')
 
     args = parser.parse_args()
     if args.tests != "all":

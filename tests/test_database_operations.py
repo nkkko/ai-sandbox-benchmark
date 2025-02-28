@@ -16,7 +16,7 @@ class DatabaseBenchmark:
         self.cursor = None
         
     def connect(self):
-        """Establish database connection"""
+        # Establish database connection
         start_time = time.time()
         self.connection = sqlite3.connect(self.db_path)
         self.cursor = self.connection.cursor()
@@ -24,7 +24,7 @@ class DatabaseBenchmark:
         return elapsed
     
     def create_tables(self):
-        """Create test tables"""
+        # Create test tables
         start_time = time.time()
         
         # Users table
@@ -73,11 +73,11 @@ class DatabaseBenchmark:
         return elapsed
     
     def generate_random_string(self, length=10):
-        """Generate a random string of specified length"""
+        # Generate a random string of specified length
         return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
     
     def insert_users(self, count):
-        """Insert a specified number of users"""
+        # Insert a specified number of users
         start_time = time.time()
         
         for i in range(count):
@@ -95,7 +95,7 @@ class DatabaseBenchmark:
         return elapsed
     
     def insert_posts(self, count, user_count):
-        """Insert a specified number of posts"""
+        # Insert a specified number of posts
         start_time = time.time()
         
         for i in range(count):
@@ -113,7 +113,7 @@ class DatabaseBenchmark:
         return elapsed
     
     def insert_comments(self, count, user_count, post_count):
-        """Insert a specified number of comments"""
+        # Insert a specified number of comments
         start_time = time.time()
         
         for i in range(count):
@@ -131,7 +131,7 @@ class DatabaseBenchmark:
         return elapsed
     
     def run_simple_query(self):
-        """Run a simple query that fetches users"""
+        # Run a simple query that fetches users
         start_time = time.time()
         
         self.cursor.execute("SELECT * FROM users LIMIT 100")
@@ -141,10 +141,10 @@ class DatabaseBenchmark:
         return elapsed, len(results)
     
     def run_join_query(self):
-        """Run a query with JOIN operations"""
+        # Run a query with JOIN operations
         start_time = time.time()
         
-        self.cursor.execute("""
+        self.cursor.execute('''
         SELECT u.username, p.title, COUNT(c.id) as comment_count
         FROM users u
         JOIN posts p ON u.id = p.user_id
@@ -152,17 +152,17 @@ class DatabaseBenchmark:
         GROUP BY p.id
         ORDER BY comment_count DESC
         LIMIT 50
-        """)
+        ''')
         results = self.cursor.fetchall()
         
         elapsed = time.time() - start_time
         return elapsed, len(results)
     
     def run_complex_query(self):
-        """Run a more complex query with subqueries and aggregations"""
+        # Run a more complex query with subqueries and aggregations
         start_time = time.time()
         
-        self.cursor.execute("""
+        self.cursor.execute('''
         SELECT 
             u.username,
             (SELECT COUNT(*) FROM posts WHERE user_id = u.id) as post_count,
@@ -172,14 +172,14 @@ class DatabaseBenchmark:
         WHERE (SELECT COUNT(*) FROM posts WHERE user_id = u.id) > 0
         ORDER BY post_count DESC, comment_count DESC
         LIMIT 25
-        """)
+        ''')
         results = self.cursor.fetchall()
         
         elapsed = time.time() - start_time
         return elapsed, len(results)
     
     def run_transaction_test(self, iterations):
-        """Test transaction performance with rollbacks"""
+        # Test transaction performance with rollbacks
         start_time = time.time()
         successful = 0
         
@@ -225,7 +225,7 @@ class DatabaseBenchmark:
         return elapsed, successful
     
     def run_concurrent_queries(self, num_workers):
-        """Test concurrent query execution"""
+        # Test concurrent query execution
         query_types = [
             ("simple", lambda: self.run_simple_query()[0]),
             ("join", lambda: self.run_join_query()[0]),
@@ -271,7 +271,7 @@ class DatabaseBenchmark:
         return total_elapsed, avg_results
     
     def close(self):
-        """Close database connection"""
+        # Close database connection
         if self.connection:
             self.connection.close()
 

@@ -1,2 +1,9 @@
 def test_list_directory():
-    return "import os; print(os.listdir('/home/daytona'))"  # Adjust paths as needed
+    """List directory contents using bash ls command instead of Python."""
+    return """
+import subprocess
+
+# Run the ls command in the home directory
+result = subprocess.run(['ls', '-la', '/home'], capture_output=True, text=True)
+print(result.stdout)
+"""

@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 
 def measure_python_startup():
-    """Measure basic Python interpreter startup time"""
+    # Measure basic Python interpreter startup time
     start_time = time.time()
     # Run a minimal Python program
     subprocess.run([sys.executable, "-c", "print('hello')"], 
@@ -20,7 +20,7 @@ def measure_python_startup():
     return end_time - start_time
 
 def measure_python_with_imports():
-    """Measure Python startup with common imports"""
+    # Measure Python startup with common imports
     script = '''
 import sys
 import os
@@ -42,7 +42,7 @@ print('Imports completed')
     return end_time - start_time
 
 def measure_numpy_startup():
-    """Measure startup time with NumPy import"""
+    # Measure startup time with NumPy import
     script = '''
 import numpy as np
 print(f"NumPy version: {np.__version__}")
@@ -60,7 +60,7 @@ print(f"NumPy version: {np.__version__}")
     return end_time - start_time, output
 
 def measure_pandas_startup():
-    """Measure startup time with Pandas import"""
+    # Measure startup time with Pandas import
     script = '''
 import pandas as pd
 print(f"Pandas version: {pd.__version__}")
@@ -78,7 +78,7 @@ print(f"Pandas version: {pd.__version__}")
     return end_time - start_time, output
 
 def measure_tensorflow_startup():
-    """Measure startup time with TensorFlow import"""
+    # Measure startup time with TensorFlow import
     script = '''
 try:
     import tensorflow as tf
@@ -101,7 +101,7 @@ except ImportError:
     return end_time - start_time, output
 
 def measure_pytorch_startup():
-    """Measure startup time with PyTorch import"""
+    # Measure startup time with PyTorch import
     script = '''
 try:
     import torch
@@ -124,7 +124,7 @@ except ImportError:
     return end_time - start_time, output
 
 def measure_web_framework_startup():
-    """Measure startup time with a web framework (Flask)"""
+    # Measure startup time with a web framework (Flask)
     script = '''
 try:
     import flask
@@ -147,7 +147,7 @@ except ImportError:
     return end_time - start_time, output
 
 def measure_database_startup():
-    """Measure startup time with database library (SQLAlchemy)"""
+    # Measure startup time with database library (SQLAlchemy)
     script = '''
 try:
     import sqlalchemy
@@ -170,7 +170,7 @@ except ImportError:
     return end_time - start_time, output
 
 def measure_virtual_env_activation():
-    """Test if we're in a virtual environment and measure activation impact"""
+    # Test if we're in a virtual environment and measure activation impact
     is_venv = sys.prefix != sys.base_prefix
     venv_path = sys.prefix if is_venv else None
     
@@ -180,7 +180,7 @@ def measure_virtual_env_activation():
     }
 
 def get_system_info():
-    """Gather system information"""
+    # Gather system information
     return {
         "platform": platform.platform(),
         "python_version": sys.version,

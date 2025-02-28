@@ -161,7 +161,7 @@ class ResourceMonitor:
         return stats
 
 def cpu_load_generator(target_load, duration):
-    """Generate CPU load targeting a specific percentage for a duration"""
+    # Generate CPU load targeting a specific percentage for a duration
     print(f"Starting CPU load test targeting {target_load*100:.0f}% for {duration}s")
     end_time = time.time() + duration
     
@@ -203,7 +203,7 @@ def cpu_load_generator(target_load, duration):
     print(f"CPU load test completed")
 
 def memory_pressure_test(duration, chunk_size):
-    """Test memory allocation and de-allocation under pressure"""
+    # Test memory allocation and de-allocation under pressure
     print(f"Starting memory pressure test for {duration}s")
     end_time = time.time() + duration
     memory_chunks = []
@@ -235,7 +235,7 @@ def memory_pressure_test(duration, chunk_size):
     print(f"Memory pressure test completed")
 
 def disk_io_test(duration, file_size):
-    """Test disk I/O operations under sustained load"""
+    # Test disk I/O operations under sustained load
     print(f"Starting disk I/O test for {duration}s")
     end_time = time.time() + duration
     
@@ -272,7 +272,7 @@ def disk_io_test(duration, file_size):
             os.remove(temp_file_path)
 
 def combined_stability_test():
-    """Run multiple tests in parallel to test overall container stability"""
+    # Run multiple tests in parallel to test overall container stability
     print(f"Starting combined stability test for {DURATION}s")
     
     # Set up resource monitoring

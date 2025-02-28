@@ -39,6 +39,15 @@ app.use((req, res, next) => {
     next();
 });
 
+// Status endpoint for health checks
+app.get('/status', (req, res) => {
+    res.json({
+        status: 'ok',
+        service: 'codesandbox-service',
+        timestamp: new Date().toISOString()
+    });
+});
+
 app.post('/execute', async (req, res) => {
     const requestId = Math.random().toString(36).substring(7);
     log(`[${requestId}] Starting code execution request`);
