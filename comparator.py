@@ -130,21 +130,34 @@ class SandboxExecutor:
         overall_results = {}
         logger.info("Starting comparison run...")
 
+        # Handle tests that should only run once
+        single_run_tests = {test_id: func for test_id, func in tests.items() 
+                           if hasattr(func, 'single_run') and func.single_run}
+        
+        multi_run_tests = {test_id: func for test_id, func in tests.items()
+                          if test_id not in single_run_tests}
+        
+        if single_run_tests:
+            test_names = ", ".join([f"{test_id}:{func.__name__}" for test_id, func in single_run_tests.items()])
+            logger.info(f"The following tests will only run once (ignoring measurement_runs): {test_names}")
+
         logger.info("Performing warmup runs...")
         for i in range(self.warmup_runs):
             logger.info(f"Warmup run {i+1}/{self.warmup_runs}")
-            for test_id, test_code_func in tests.items():
+            # Only do warmup runs for multi-run tests
+            for test_id, test_code_func in multi_run_tests.items():
                 for provider in providers:
                     async with asyncio.Semaphore(self.num_concurrent_providers):
                         with ThreadPoolExecutor(max_workers=self.num_concurrent_providers) as executor:
                             await self.run_test_on_provider(test_code_func, provider, executor, target_region)
 
-        logger.info(f"Performing {measurement_runs} measurement runs...")
-        for run in range(measurement_runs):
-            logger.info(f"Measurement run {run+1}/{measurement_runs}")
-            for test_id, test_code_func in tests.items():
+        # Process single-run tests first (one run only)
+        if single_run_tests:
+            logger.info("Performing single-run tests...")
+            for test_id, test_code_func in single_run_tests.items():
+                logger.info(f"Running test {test_id}: {test_code_func.__name__} (single run)")
                 test_results = overall_results.setdefault(f"test_{test_id}", {})
-                run_results = test_results.setdefault(f"run_{run+1}", {})
+                run_results = test_results.setdefault("run_1", {})
 
                 measurement_tasks = []
                 with ThreadPoolExecutor(max_workers=self.num_concurrent_providers) as executor:
@@ -156,13 +169,40 @@ class SandboxExecutor:
                     for i, provider_result in enumerate(provider_run_results):
                         provider = providers[i]
                         if isinstance(provider_result, Exception):
-                            logger.error(f"Run {run+1}, Test {test_id}: Failed to execute {provider}: {str(provider_result)}")
+                            logger.error(f"Test {test_id}: Failed to execute {provider}: {str(provider_result)}")
                             run_results[provider] = {'metrics': EnhancedTimingMetrics(), 'output': None, 'error': str(provider_result)}
                         else:
                             p_name, p_results, error = provider_result
                             run_results[p_name] = p_results
                             if error:
                                 run_results[p_name]['error'] = str(error)
+
+        # Process multi-run tests
+        if multi_run_tests:
+            logger.info(f"Performing {measurement_runs} measurement runs for standard tests...")
+            for run in range(measurement_runs):
+                logger.info(f"Measurement run {run+1}/{measurement_runs}")
+                for test_id, test_code_func in multi_run_tests.items():
+                    test_results = overall_results.setdefault(f"test_{test_id}", {})
+                    run_results = test_results.setdefault(f"run_{run+1}", {})
+
+                    measurement_tasks = []
+                    with ThreadPoolExecutor(max_workers=self.num_concurrent_providers) as executor:
+                        for provider in providers:
+                            task = asyncio.create_task(self.run_test_on_provider(test_code_func, provider, executor, target_region))
+                            measurement_tasks.append(task)
+
+                        provider_run_results = await asyncio.gather(*measurement_tasks, return_exceptions=True)
+                        for i, provider_result in enumerate(provider_run_results):
+                            provider = providers[i]
+                            if isinstance(provider_result, Exception):
+                                logger.error(f"Run {run+1}, Test {test_id}: Failed to execute {provider}: {str(provider_result)}")
+                                run_results[provider] = {'metrics': EnhancedTimingMetrics(), 'output': None, 'error': str(provider_result)}
+                            else:
+                                p_name, p_results, error = provider_result
+                                run_results[p_name] = p_results
+                                if error:
+                                    run_results[p_name]['error'] = str(error)
         return overall_results
 
 
