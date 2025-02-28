@@ -149,6 +149,15 @@ python benchmark.py --cli
 
 - `--target-region`: Target region (e.g., `eu`, `us`, `asia`).
   **Default:** `eu`
+  
+- `--show-history`: Show historical performance comparison.
+  **Default:** Disabled (flag to enable)
+  
+- `--history-limit`: Number of previous runs to include in history.
+  **Default:** `5`
+  
+- `--history-file`: Path to the benchmark history file.
+  **Default:** `benchmark_history.json`
 
 #### Examples
 
@@ -168,6 +177,24 @@ python benchmark.py --cli
 
   ```bash
   python comparator.py --runs 20 --warmup-runs 2
+  ```
+  
+- **View Historical Performance Trends**
+
+  ```bash
+  python comparator.py --tests 1 --show-history
+  ```
+
+- **Compare Recent Performance with History**
+
+  ```bash
+  python comparator.py --tests 1,2 --providers daytona,e2b --show-history --history-limit 10
+  ```
+
+- **Use Custom History File**
+
+  ```bash
+  python comparator.py --tests 1 --history-file custom_history.json --show-history
   ```
 
 ### Parallel Provider Testing
@@ -198,16 +225,38 @@ python benchmark.py
 - **Statistical Analysis**: Mean, standard deviation, and relative performance comparisons
 - **Warmup Runs**: Configurable warmup runs to ensure stable measurements
 
-## 📈 Metrics
+## 📈 Metrics & Performance Tracking
 
-Currently, Sandbox Comparator focuses on executing standardized tests across different sandbox providers and collecting basic performance metrics such as workspace creation time, code execution time, and cleanup time.
+AI Sandbox Benchmark collects detailed performance metrics across providers and offers robust historical tracking:
 
-**Planned Enhancements:**
+### Core Metrics
+
+- **Workspace Creation Time**: Time taken to initialize the sandbox environment
+- **Code Execution Time**: Time to execute the test code
+- **Cleanup Time**: Time required to tear down resources
+- **Total Time**: Overall end-to-end performance
+
+### Historical Performance Tracking
+
+The benchmark suite now includes performance history tracking that:
+
+- **Stores Results**: Automatically saves benchmark results to a history file
+- **Tracks Trends**: Analyzes performance changes over time
+- **Detects Changes**: Identifies improvements or regressions between runs
+- **Compares Providers**: Shows relative performance across providers
+
+### Advanced Analysis
+
+- **Statistical Metrics**: Standard deviation, coefficient of variation, min/max values
+- **Provider Comparisons**: Identifies fastest and most consistent providers
+- **Reliability Tracking**: Tracks error rates and failures over time
+- **Performance Trends**: Visualizes performance changes with percentage improvements
+
+### Future Enhancements
+
 - Comprehensive network performance metrics
-- Enhanced reliability tracking
-- Advanced statistical analysis
-
-Stay tuned for updates as we continue to expand the benchmarking capabilities!
+- Graphical visualization of performance trends
+- Automated regression detection and alerting
 
 ## 🤝 Contributing
 
