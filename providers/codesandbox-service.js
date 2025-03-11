@@ -96,35 +96,100 @@ app.post('/execute', async (req, res) => {
         // Check for dependencies and install them if needed
         log(`[${requestId}] Checking for dependencies in code...`);
         const dependencyCheckerCode = `
-import re, sys, subprocess
+import sys
 
-def extract_imports(code):
-    # Extract all import statements
-    import_pattern = re.compile(r'^(?:from|import)\\s+([a-zA-Z0-9_]+)', re.MULTILINE)
-    return set(import_pattern.findall(code))
+# First, ensure the utils module is accessible
+try:
+    from providers.utils import check_and_install_dependencies
+except ImportError:
+    # If running in a fresh container, create the providers directory and utils.py
+    import os, subprocess
+    
+    # Create providers directory if it doesn't exist
+    if not os.path.exists('providers'):
+        os.makedirs('providers')
+        
+    # Create __init__.py in providers directory
+    with open('providers/__init__.py', 'w') as f:
+        f.write('# Package initialization')
+    
+    # Create utils.py with necessary code
+    with open('providers/utils.py', 'w') as f:
+        f.write("""
+import importlib
+import re
+import sys
+from typing import List, Set, Optional, Dict, Any
 
-def check_and_install_dependencies(code):
-    # Get all imports
+def is_standard_library(module_name: str) -> bool:
+    # Standard approach to detect standard library modules
+    try:
+        path = getattr(importlib.import_module(module_name), "__file__", "")
+        return path and ("site-packages" not in path and "dist-packages" not in path)
+    except (ImportError, AttributeError):
+        # If import fails, we'll assume it's not a standard library
+        return False
+
+def extract_imports(code: str) -> Set[str]:
+    # This regex pattern captures both 'import x' and 'from x import y' style imports
+    pattern = r'^(?:from|import)\\s+([a-zA-Z0-9_]+)'
+    imports = set()
+    
+    for line in code.split('\\n'):
+        match = re.match(pattern, line.strip())
+        if match:
+            imports.add(match.group(1))
+    
+    return imports
+
+def check_and_install_dependencies(
+    code: str,
+    provider_context: Optional[Dict[str, Any]] = None,
+    always_install: Optional[List[str]] = None
+) -> List[str]:
+    import subprocess
+    
+    installed_packages = []
+    
+    # Install packages that should always be available
+    if always_install:
+        for package in always_install:
+            try:
+                importlib.import_module(package)
+                print(f"Package {package} is already installed.")
+            except ImportError:
+                print(f"Installing required package: {package}")
+                subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+                installed_packages.append(package)
+    
+    # Extract imports from the code
     imports = extract_imports(code)
     
-    # Skip standard library modules
-    std_lib_modules = set(sys.modules.keys()) & imports
-    third_party_modules = imports - std_lib_modules
+    # Filter out standard library modules
+    third_party_modules = {
+        module for module in imports if not is_standard_library(module)
+    }
     
+    # Check each third-party module and install if missing
     for module in third_party_modules:
         try:
-            __import__(module)
-            print(f"✓ Module '{module}' is already installed")
+            importlib.import_module(module)
+            print(f"Module {module} is already installed.")
         except ImportError:
-            print(f"⚠ Module '{module}' not found, installing...")
-            try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", module])
-                print(f"✓ Successfully installed '{module}'")
-            except subprocess.CalledProcessError as e:
-                print(f"✗ Failed to install '{module}': {str(e)}")
+            print(f"Installing missing dependency: {module}")
+            # Use pip to install the package
+            subprocess.check_call([sys.executable, "-m", "pip", "install", module])
+            installed_packages.append(module)
+    
+    return installed_packages
+""")
+    
+    # Import again after creating the file
+    from providers.utils import check_and_install_dependencies
 
 # The code string is passed in with triple quotes to handle any internal quotes
-check_and_install_dependencies('''${code.replace(/'/g, "\\'")}''')
+installed_packages = check_and_install_dependencies('''${code.replace(/'/g, "\\'")}''')
+print(f"Installed packages: {installed_packages}")
 `;
 
         const dependencyResult = await sandbox.shells.python.run(dependencyCheckerCode);

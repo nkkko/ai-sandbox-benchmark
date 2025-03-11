@@ -2,9 +2,10 @@
 
 import time, os, asyncio, logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Any
+from typing import Dict, Any, List
 from daytona_sdk import Daytona, DaytonaConfig, CreateWorkspaceParams
 from metrics import EnhancedTimingMetrics
+from providers.utils import extract_imports, check_and_install_dependencies
 
 logger = logging.getLogger(__name__)
 
@@ -135,66 +136,22 @@ else:
 
         # Check and install dependencies
         logger.info("Checking for dependencies in code...")
-        dependency_checker = """
-import re, sys, subprocess
+        # Define the list of packages to always install for Daytona
+        always_install_packages = ['python-dotenv', 'langchain', 'langchain-openai', 'openai', 'langchain-anthropic', 'anthropic']
+        
+        # Use the centralized dependency installation utility
+        dependency_checker = f"""
+import sys
+from providers.utils import check_and_install_dependencies
 
-# First, ensure python-dotenv is installed
-try:
-    import dotenv
-    print("✓ Module 'dotenv' is already installed")
-except ImportError:
-    print("⚠ Module 'dotenv' not found, installing...")
-    try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "python-dotenv"])
-        print("✓ Successfully installed 'python-dotenv'")
-    except subprocess.CalledProcessError as e:
-        print(f"✗ Failed to install 'python-dotenv': {str(e)}")
-
-# Also ensure required packages are installed
-for required_pkg in ['langchain', 'langchain-openai', 'openai', 'langchain-anthropic', 'anthropic']:
-    try:
-        module_name = required_pkg.replace('-', '_')
-        __import__(module_name)
-        print(f"✓ Module '{required_pkg}' is already installed")
-    except ImportError:
-        print(f"⚠ Module '{required_pkg}' not found, installing...")
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", required_pkg])
-            print(f"✓ Successfully installed '{required_pkg}'")
-        except subprocess.CalledProcessError as e:
-            print(f"✗ Failed to install '{required_pkg}': {str(e)}")
-
-def extract_imports(code):
-    # Extract all import statements
-    import_pattern = re.compile(r'^(?:from|import)\s+([a-zA-Z0-9_]+)', re.MULTILINE)
-    return set(import_pattern.findall(code))
-
-def check_and_install_dependencies(code):
-    # Get all imports
-    imports = extract_imports(code)
-
-    # Skip standard library modules
-    std_lib_modules = set(sys.modules.keys()) & imports
-    third_party_modules = imports - std_lib_modules
-
-    for module in third_party_modules:
-        try:
-            __import__(module)
-            print(f"✓ Module '{module}' is already installed")
-        except ImportError:
-            print(f"⚠ Module '{module}' not found, installing...")
-            try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", module])
-                print(f"✓ Successfully installed '{module}'")
-            except subprocess.CalledProcessError as e:
-                print(f"✗ Failed to install '{module}': {str(e)}")
-
-# The code string is passed in quotes to the function
-check_and_install_dependencies('''{code_str}''')
+# The code is passed in with triple quotes to handle any internal quotes
+installed_packages = check_and_install_dependencies(
+    '''{code.replace("'", "\\'")}''',
+    always_install={always_install_packages}
+)
+print(f"Installed packages: {{installed_packages}}")
 """
-        # Replace {code_str} with the actual code, escaping any quotes
-        dependency_installer = dependency_checker.replace("{code_str}", code.replace("'", "\\'"))
-        await loop.run_in_executor(executor, workspace.process.code_run, dependency_installer)
+        await loop.run_in_executor(executor, workspace.process.code_run, dependency_checker)
 
         logger.info("Executing code in Daytona...")
         start = time.time()
