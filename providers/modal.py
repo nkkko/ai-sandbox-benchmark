@@ -16,10 +16,14 @@ image = modal.Image.debian_slim().pip_install(
     "matplotlib",
     "requests",
     "psutil"
+).add_local_python_source(
+    "comparator", 
+    "metrics", 
+    "tests"
 )
 
 # Copy our dependency utilities to an init function that will be executed in the Modal container
-@image.run_function()
+@image.run_function
 def init_dependency_utils():
     """Create utility functions for dependency management in the Modal container."""
     import os

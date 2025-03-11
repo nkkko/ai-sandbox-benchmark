@@ -66,7 +66,12 @@ def run_plain_benchmark(test_ids, providers, runs, warmup_runs, region):
     
     # Run the benchmark using asyncio
     import asyncio
-    loop = asyncio.get_running_loop()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
     results = loop.run_until_complete(executor.run_comparison(
         tests_to_run,
         providers,
@@ -78,8 +83,10 @@ def run_plain_benchmark(test_ids, providers, runs, warmup_runs, region):
     visualizer = comp.ResultsVisualizer()
     visualizer.print_detailed_comparison(results, tests_to_run, runs, warmup_runs, providers)
     
-    print("\nBenchmark finished. Press Enter to return to main menu...")
-    input()
+    # In CLI mode, we don't need to wait for input
+    if not '--cli' in sys.argv:
+        print("\nBenchmark finished. Press Enter to return to main menu...")
+        input()
 
 
 class BenchmarkTUI:
