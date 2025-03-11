@@ -187,8 +187,17 @@ def check_and_install_dependencies(
     # Import again after creating the file
     from providers.utils import check_and_install_dependencies
 
+# Define common packages needed for tests
+always_install_packages = [
+    'numpy',  # Required for FFT tests
+    'scipy',  # Required for FFT tests
+]
+
 # The code string is passed in with triple quotes to handle any internal quotes
-installed_packages = check_and_install_dependencies('''${code.replace(/'/g, "\\'")}''')
+installed_packages = check_and_install_dependencies(
+    '''${code.replace(/'/g, "\\'")}''',
+    always_install=always_install_packages
+)
 print(f"Installed packages: {installed_packages}")
 `;
 

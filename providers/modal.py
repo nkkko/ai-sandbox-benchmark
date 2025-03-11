@@ -147,11 +147,20 @@ def check_and_install_dependencies(
     
     return installed_packages
 
+# Define common packages needed for tests
+always_install_packages = [
+    'numpy',  # Required for FFT tests
+    'scipy',  # Required for FFT tests
+]
+
 # Read the code from file and check dependencies
 with open('/sandbox/code.py', 'r') as f:
     code = f.read()
     
-installed_packages = check_and_install_dependencies(code)
+installed_packages = check_and_install_dependencies(
+    code,
+    always_install=always_install_packages
+)
 print(f"Installed packages: {{installed_packages}}")
 """
         

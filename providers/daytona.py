@@ -137,7 +137,16 @@ else:
         # Check and install dependencies
         logger.info("Checking for dependencies in code...")
         # Define the list of packages to always install for Daytona
-        always_install_packages = ['python-dotenv', 'langchain', 'langchain-openai', 'openai', 'langchain-anthropic', 'anthropic']
+        always_install_packages = [
+            'python-dotenv', 
+            'langchain', 
+            'langchain-openai', 
+            'openai', 
+            'langchain-anthropic', 
+            'anthropic',
+            'numpy',  # Required for FFT tests
+            'scipy',  # Required for FFT tests
+        ]
         
         # Use the centralized dependency installation utility
         dependency_checker = f"""

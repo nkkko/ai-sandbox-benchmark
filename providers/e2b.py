@@ -26,6 +26,12 @@ async def execute(code: str, env_vars: Dict[str, str] = None):
         
         # Check and install dependencies
         logger.info("Checking for dependencies in code...")
+        # Define common packages needed for tests
+        always_install_packages = [
+            'numpy',  # Required for FFT tests
+            'scipy',  # Required for FFT tests
+        ]
+        
         # Use the centralized dependency installation utility
         dependency_checker = f"""
 import sys
@@ -33,7 +39,8 @@ from providers.utils import check_and_install_dependencies
 
 # The code is passed in with triple quotes to handle any internal quotes
 installed_packages = check_and_install_dependencies(
-    '''{code.replace("'", "\\'")}'''
+    '''{code.replace("'", "\\'")}''',
+    always_install={always_install_packages}
 )
 print(f"Installed packages: {{installed_packages}}")
 """
