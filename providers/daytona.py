@@ -37,13 +37,13 @@ async def execute(code: str, executor: ThreadPoolExecutor, target_region: str, e
                     logger.info(f"  {key} (length: {len(value)}, prefix: {prefix}...)")
                 else:
                     logger.info(f"  {key} (length: {len(value)})")
-            
+
             # First create a .env file with all environment variables
             env_file_content = ""
             for key, value in env_vars.items():
                 # Just use raw value without quotes to avoid escaping issues
                 env_file_content += f"{key}={value}\n"
-            
+
             create_env_file_code = f"""
 with open('/home/daytona/.env', 'w') as f:
     f.write('''{env_file_content}''')
@@ -73,7 +73,7 @@ except ImportError:
                 workspace.process.code_run,
                 create_env_file_code
             )
-            
+
             # Also set each environment variable using direct Python code execution as a backup
             for key, value in env_vars.items():
                 # Use triple quotes to avoid escaping issues
@@ -86,11 +86,11 @@ print("Set {key} with length", len(os.environ["{key}"]))
 """
                 logger.info(f"Setting {key} in Daytona workspace")
                 await loop.run_in_executor(
-                    executor, 
-                    workspace.process.code_run, 
+                    executor,
+                    workspace.process.code_run,
                     env_var_code
                 )
-            
+
             # Verify all environment variables were set correctly
             verification_code = """
 import os
@@ -116,7 +116,7 @@ try:
         print(f.read())
 except Exception as e:
     print(f"Error reading .env file in home directory: {e}")
-    
+
 print("\\nEnvironment variables in os.environ:")
 """
             for key in env_vars.keys():
@@ -126,13 +126,13 @@ if "{key}" in os.environ:
 else:
     print("{key} is NOT SET")
 """
-            
+
             await loop.run_in_executor(
-                executor, 
-                workspace.process.code_run, 
+                executor,
+                workspace.process.code_run,
                 verification_code
             )
-        
+
         # Check and install dependencies
         logger.info("Checking for dependencies in code...")
         dependency_checker = """
@@ -172,11 +172,11 @@ def extract_imports(code):
 def check_and_install_dependencies(code):
     # Get all imports
     imports = extract_imports(code)
-    
+
     # Skip standard library modules
     std_lib_modules = set(sys.modules.keys()) & imports
     third_party_modules = imports - std_lib_modules
-    
+
     for module in third_party_modules:
         try:
             __import__(module)

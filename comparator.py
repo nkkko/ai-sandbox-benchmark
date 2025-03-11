@@ -634,8 +634,13 @@ class ResultsVisualizer:
 async def main(args):
     # Set num_concurrent_providers to match the number of providers being tested
     # This ensures we efficiently use resources for parallel provider execution
-    providers_to_run = args.providers.split(',')
-    num_concurrent = len(providers_to_run)
+    providers_to_run = args.providers.split(',') if args.providers else []
+    num_concurrent = max(1, len(providers_to_run))  # Ensure at least 1 for executor
+    
+    # Validate that we have providers to run
+    if not providers_to_run:
+        logger.error("No providers specified to run tests on.")
+        return
     
     executor_obj = SandboxExecutor(
         warmup_runs=args.warmup_runs, 
@@ -648,12 +653,17 @@ async def main(args):
     tests_to_run = {}
     if args.tests == "all":
         tests_to_run = defined_tests
-    else:
+    elif args.tests:  # Check that tests string is not empty
         for test_id in map(int, args.tests.split(',')):
             if test_id in defined_tests:
                 tests_to_run[test_id] = defined_tests[test_id]
             else:
                 logger.warning(f"Test ID {test_id} not found and will be skipped.")
+                
+    # Validate that we have tests to run
+    if not tests_to_run:
+        logger.error("No valid tests specified to run.")
+        return
 
     try:
         # Initialize benchmark history tracker with specified history file
@@ -715,8 +725,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run sandbox performance comparison tests.")
     parser.add_argument('--tests', '-t', type=str, default='all',
                         help='Comma-separated list of test IDs to run (or "all" for all tests). Default: all')
+    parser.add_argument('-a', '--all-tests', action='store_true',
+                        help='Toggle between selecting all tests and no tests')
     parser.add_argument('--providers', '-p', type=str, default='daytona,e2b,codesandbox,modal',
                         help='Comma-separated list of providers to test. Default: daytona,e2b,codesandbox,modal')
+    parser.add_argument('-A', '--all-providers', action='store_true',
+                        help='Toggle between selecting all providers and no providers')
     parser.add_argument('--runs', '-r', type=int, default=10,
                         help='Number of measurement runs per test/provider. Default: 10')
     parser.add_argument('--warmup-runs', '-w', type=int, default=1,
@@ -731,9 +745,35 @@ if __name__ == "__main__":
                         help='Path to the benchmark history file. Default: benchmark_history.json')
 
     args = parser.parse_args()
-    if args.tests != "all":
+    
+    # Handle all-tests toggle
+    if args.all_tests:
+        # Toggle between all and none
+        if args.tests == "all":
+            args.tests = ""
+        else:
+            args.tests = "all"
+    
+    # Handle all-providers toggle
+    if args.all_providers:
+        # Toggle between all and none
+        all_providers = "daytona,e2b,codesandbox,modal"
+        if args.providers == all_providers:
+            args.providers = ""
+        else:
+            args.providers = all_providers
+    
+    # Validate tests
+    if args.tests != "all" and args.tests:
         try:
             test_ids = list(map(int, args.tests.split(',')))
         except ValueError:
             parser.error("--tests must be 'all' or comma-separated integers.")
+    elif args.tests == "":
+        parser.error("No tests selected. Use --select-all-tests or specify tests with --tests.")
+        
+    # Validate providers
+    if not args.providers:
+        parser.error("No providers selected. Use --select-all-providers or specify providers with --providers.")
+        
     asyncio.run(main(args))

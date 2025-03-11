@@ -66,7 +66,7 @@ def run_plain_benchmark(test_ids, providers, runs, warmup_runs, region):
     
     # Run the benchmark using asyncio
     import asyncio
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     results = loop.run_until_complete(executor.run_comparison(
         tests_to_run,
         providers,
@@ -230,14 +230,31 @@ class BenchmarkTUI:
         """Display the providers configuration screen."""
         self.stdscr.addstr(4, 3, "Select Providers:", curses.A_BOLD)
         self.stdscr.addstr(5, 3, "Use ↑/↓ to navigate, Space to toggle, Enter to confirm, q to return")
+        
+        # Add toggle all option
+        y = 7
+        status = "[A] Toggle All Providers"
+        attr = curses.A_NORMAL
+        
+        if self.menu_cursor == 0:
+            attr |= curses.A_BOLD
+            self.stdscr.addstr(y, 5, "→ ", attr)
+        else:
+            self.stdscr.addstr(y, 5, "  ")
+            
+        self.stdscr.addstr(y, 7, status, attr)
+        
+        # Display separator
+        self.stdscr.addstr(y + 1, 7, "─" * 30)
 
+        # Display individual providers
         for i, provider in enumerate(self.providers):
-            y = 7 + i
+            y = 9 + i
             status = "[✓]" if provider in self.selected_providers else "[ ]"
             attr = curses.A_NORMAL
 
-            if i == self.menu_cursor:
-                attr |= curses.A_BOLD  # Only use bold for selected menu item
+            if i + 1 == self.menu_cursor:  # +1 because we added the toggle all option
+                attr |= curses.A_BOLD
                 self.stdscr.addstr(y, 5, "→ ", attr)
             else:
                 self.stdscr.addstr(y, 5, "  ")
@@ -252,24 +269,53 @@ class BenchmarkTUI:
         """Display the tests configuration screen."""
         self.stdscr.addstr(4, 3, "Select Tests:", curses.A_BOLD)
         self.stdscr.addstr(5, 3, "Use ↑/↓ to navigate, Space to toggle, Enter to confirm, q to return")
+        
+        # Add toggle all option
+        y = 7
+        status = "[A] Toggle All Tests"
+        attr = curses.A_NORMAL
+        
+        if self.menu_cursor == 0 and self.scroll_offset == 0:
+            attr |= curses.A_BOLD
+            self.stdscr.addstr(y, 5, "→ ", attr)
+        else:
+            self.stdscr.addstr(y, 5, "  ")
+            
+        self.stdscr.addstr(y, 7, status, attr)
+        
+        # Display separator
+        self.stdscr.addstr(y + 1, 7, "─" * 30)
 
-        offset = self.scroll_offset
-        visible_items = min(self.height - 12, len(defined_tests))
+        # Adjust offset and menu cursor for the toggle all option
+        display_offset = self.scroll_offset
+        if display_offset == 0:
+            # First item in the list is "Toggle All"
+            visible_items = min(self.height - 14, len(defined_tests))
+            test_display_start = 9  # Start displaying tests after the toggle all option
+        else:
+            # "Toggle All" option is scrolled out of view
+            visible_items = min(self.height - 12, len(defined_tests) - display_offset)
+            test_display_start = 7
 
         # Show scroll indicators if needed
-        if offset > 0:
+        if display_offset > 0:
             self.stdscr.addstr(6, self.width // 2, "↑ (more tests above)")
-        if offset + visible_items < len(defined_tests):
-            self.stdscr.addstr(7 + visible_items, self.width // 2, "↓ (more tests below)")
+        if display_offset + visible_items < len(defined_tests):
+            self.stdscr.addstr(test_display_start + visible_items, self.width // 2, "↓ (more tests below)")
 
-        for i, (test_id, test_func) in enumerate(list(defined_tests.items())[offset:offset+visible_items]):
-            y = 7 + i
+        for i, (test_id, test_func) in enumerate(list(defined_tests.items())[display_offset:display_offset+visible_items]):
+            y = test_display_start + i
             is_single_run = hasattr(test_func, 'single_run') and test_func.single_run
             single_run_info = " (single run)" if is_single_run else ""
             status = "[✓]" if test_id in self.selected_tests else "[ ]"
             attr = curses.A_NORMAL
 
-            if i + offset == self.menu_cursor:
+            # Adjust menu cursor positioning for the toggle all option
+            cursor_pos = i + display_offset
+            if display_offset == 0:
+                cursor_pos += 1  # Shift by 1 for the "Toggle All" option
+                
+            if cursor_pos == self.menu_cursor:
                 attr |= curses.A_BOLD  # Only use bold for selected item
                 self.stdscr.addstr(y, 5, "→ ", attr)
             else:
@@ -511,20 +557,40 @@ class BenchmarkTUI:
         if key == curses.KEY_UP:
             self.menu_cursor = max(0, self.menu_cursor - 1)
         elif key == curses.KEY_DOWN:
-            self.menu_cursor = min(len(self.providers) - 1, self.menu_cursor + 1)
+            self.menu_cursor = min(len(self.providers), self.menu_cursor + 1)  # +1 for toggle all option
         elif key == ord(' '):  # Space to toggle
-            provider = self.providers[self.menu_cursor]
-            if provider in self.selected_providers:
-                self.selected_providers.remove(provider)
-                self.set_status(f"Provider '{provider}' deselected", "info")
-            else:
-                # Special handling for CodeSandbox
-                if provider == 'codesandbox' and not self.check_codesandbox_service():
-                    self.selected_providers.append(provider)
-                    self.set_status(f"Provider '{provider}' selected, but service not detected. Run 'node providers/codesandbox-service.js' first!", "warn")
+            if self.menu_cursor == 0:  # Toggle All option
+                if len(self.selected_providers) == len(self.providers):
+                    # All are selected, so deselect all
+                    self.selected_providers = []
+                    self.set_status("All providers deselected", "info")
                 else:
-                    self.selected_providers.append(provider)
-                    self.set_status(f"Provider '{provider}' selected", "success")
+                    # Not all are selected, so select all
+                    self.selected_providers = self.providers.copy()
+                    self.set_status("All providers selected", "success")
+            else:
+                # Regular provider toggle (adjusted index for the toggle all option)
+                provider = self.providers[self.menu_cursor - 1]
+                if provider in self.selected_providers:
+                    self.selected_providers.remove(provider)
+                    self.set_status(f"Provider '{provider}' deselected", "info")
+                else:
+                    # Special handling for CodeSandbox
+                    if provider == 'codesandbox' and not self.check_codesandbox_service():
+                        self.selected_providers.append(provider)
+                        self.set_status(f"Provider '{provider}' selected, but service not detected. Run 'node providers/codesandbox-service.js' first!", "warn")
+                    else:
+                        self.selected_providers.append(provider)
+                        self.set_status(f"Provider '{provider}' selected", "success")
+        elif key in (ord('a'), ord('A')):  # A key as a shortcut to toggle all
+            if len(self.selected_providers) == len(self.providers):
+                # All are selected, so deselect all
+                self.selected_providers = []
+                self.set_status("All providers deselected", "info")
+            else:
+                # Not all are selected, so select all
+                self.selected_providers = self.providers.copy()
+                self.set_status("All providers selected", "success")
         elif key in (curses.KEY_ENTER, 10, 13):  # Enter to confirm and return
             # Check for CodeSandbox service if it's selected
             if 'codesandbox' in self.selected_providers and not self.check_codesandbox_service():
@@ -547,19 +613,54 @@ class BenchmarkTUI:
                 if self.menu_cursor < self.scroll_offset:
                     self.scroll_offset = self.menu_cursor
         elif key == curses.KEY_DOWN:
-            if self.menu_cursor < len(defined_tests) - 1:
+            test_count = len(defined_tests)
+            # Add offset for the toggle all option when scroll_offset is 0
+            max_cursor = test_count if self.scroll_offset > 0 else test_count
+            if self.menu_cursor < max_cursor:
                 self.menu_cursor += 1
-                visible_height = min(self.height - 12, len(defined_tests))
-                if self.menu_cursor >= self.scroll_offset + visible_height:
-                    self.scroll_offset = self.menu_cursor - visible_height + 1
+                
+                # If we're past the toggle all option, adjust scrolling
+                if self.scroll_offset == 0 and self.menu_cursor > 1:
+                    visible_height = min(self.height - 14, test_count)
+                    if self.menu_cursor - 1 >= visible_height:  # -1 to adjust for toggle all
+                        self.scroll_offset = self.menu_cursor - visible_height
+                elif self.scroll_offset > 0:
+                    visible_height = min(self.height - 12, test_count - self.scroll_offset)
+                    if self.menu_cursor >= self.scroll_offset + visible_height:
+                        self.scroll_offset = self.menu_cursor - visible_height + 1
         elif key == ord(' '):  # Space to toggle
-            test_id = list(defined_tests.keys())[self.menu_cursor]
-            if test_id in self.selected_tests:
-                self.selected_tests.remove(test_id)
-                self.set_status(f"Test {test_id} deselected", "info")
+            if self.menu_cursor == 0 and self.scroll_offset == 0:  # Toggle All option
+                if len(self.selected_tests) == len(defined_tests):
+                    # All are selected, so deselect all
+                    self.selected_tests = []
+                    self.set_status("All tests deselected", "info")
+                else:
+                    # Not all are selected, so select all
+                    self.selected_tests = list(defined_tests.keys())
+                    self.set_status("All tests selected", "success")
             else:
-                self.selected_tests.append(test_id)
-                self.set_status(f"Test {test_id} selected", "success")
+                # Regular test toggle, adjusting for toggle all option
+                if self.scroll_offset == 0:
+                    test_index = self.menu_cursor - 1  # Adjust for toggle all option
+                else:
+                    test_index = self.menu_cursor
+                
+                test_id = list(defined_tests.keys())[test_index]
+                if test_id in self.selected_tests:
+                    self.selected_tests.remove(test_id)
+                    self.set_status(f"Test {test_id} deselected", "info")
+                else:
+                    self.selected_tests.append(test_id)
+                    self.set_status(f"Test {test_id} selected", "success")
+        elif key in (ord('a'), ord('A')):  # A key as a shortcut to toggle all
+            if len(self.selected_tests) == len(defined_tests):
+                # All are selected, so deselect all
+                self.selected_tests = []
+                self.set_status("All tests deselected", "info")
+            else:
+                # Not all are selected, so select all
+                self.selected_tests = list(defined_tests.keys())
+                self.set_status("All tests selected", "success")
         elif key in (curses.KEY_ENTER, 10, 13):  # Enter to confirm and return
             self.switch_to_main()
             self.set_status("Test selection saved", "success")

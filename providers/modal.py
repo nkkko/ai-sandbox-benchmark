@@ -1,77 +1,94 @@
 # providers/modal.py
 
-import time, asyncio, logging, os, inspect
-from typing import Dict, Any
+import time
+import logging
+from typing import Dict
 import modal
 from metrics import EnhancedTimingMetrics
 
 logger = logging.getLogger(__name__)
 
+# Define the image with necessary packages at global scope
+image = modal.Image.debian_slim().pip_install(
+    "numpy", 
+    "pandas", 
+    "scipy",  # Required for FFT tests
+    "matplotlib",
+    "requests",
+    "psutil"
+)
+
+
 async def execute(code: str, env_vars: Dict[str, str] = None):
     metrics = EnhancedTimingMetrics()
+    sandbox = None
     try:
         logger.info("Creating Modal sandbox...")
         start = time.time()
 
-        # Create a function in Modal that will execute our code
-        # Use the approach from the original implementation but incorporate sandbox concepts
-        @modal.function(
-            image=modal.Image.debian_slim().pip_install("numpy", "pandas"),
-            secrets=[modal.Secret.from_dict({k: v for k, v in (env_vars or {}).items()})] if env_vars else None
+        # Look up or create an app as required by Modal
+        app = modal.App.lookup(
+            "sandbox-execution",
+            create_if_missing=True
         )
-        def run_code_in_modal():
-            import sys
-            import subprocess
-            import os
-            import tempfile
-            
-            # Set up environment variables inside the function
-            if env_vars:
-                for k, v in env_vars.items():
-                    os.environ[k] = v
-            
-            # Write code to a file
-            with open("/tmp/code.py", "w") as f:
-                f.write(code)
-            
-            # Create a container-like sandbox environment
-            # This simulates the sandbox behavior within the Modal function
-            os.makedirs("/sandbox", exist_ok=True)
-            
-            # Run the code and capture output
-            result = subprocess.run(
-                [sys.executable, "/tmp/code.py"],
-                capture_output=True,
-                text=True,
-                cwd="/sandbox"  # Run in the sandbox directory
-            )
-            
-            return {
-                "success": result.returncode == 0,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "returncode": result.returncode
-            }
-        
-        # Run the Modal function
-        logger.info("Running code in Modal...")
+
+        # Create secrets for environment variables if provided
+        secrets = None
+        if env_vars:
+            env_dict = {k: v for k, v in env_vars.items()}
+            secrets = [modal.Secret.from_dict(env_dict)]
+
+        # Create a sandbox with the app and image
+        sandbox = modal.Sandbox.create(
+            app=app,
+            image=image,
+            secrets=secrets
+        )
+
+        # Write the code to a file inside the sandbox
+        logger.info("Writing code to sandbox...")
+
+        # Create directory and write the code file directly in the sandbox
+        mkdir_cmd = sandbox.exec("mkdir", "-p", "/sandbox")
+        mkdir_cmd.wait()
+
+        # Write the Python code to a file in the sandbox
+        write_cmd = sandbox.exec(
+            "bash",
+            "-c",
+            f'cat > /sandbox/code.py << \'EOL\'\n{code}\nEOL'
+        )
+        write_cmd.wait()
+
+        # Track setup time
         metrics.add_metric("Workspace Creation", time.time() - start)
-        
+
+        # Execute the code
+        logger.info("Running code in Modal sandbox...")
         start_exec = time.time()
-        result = run_code_in_modal.call()
+        process = sandbox.exec("python", "/sandbox/code.py")
+
+        # Collect output
+        stdout_data = process.stdout.read()
+        stderr_data = process.stderr.read()
+
+        # Record execution time
         metrics.add_metric("Code Execution", time.time() - start_exec)
-        
-        # Extract the output
-        if isinstance(result, dict) and "stdout" in result:
-            output = result["stdout"]
-            if result.get("stderr"):
-                logger.info(f"Stderr from Modal execution: {result['stderr']}")
-        else:
-            output = str(result)
-        
+
+        # Combine outputs if needed
+        output = stdout_data
+        if stderr_data:
+            logger.info(f"Stderr from Modal execution: {stderr_data}")
+
         return output, metrics
 
     except Exception as e:
         metrics.add_error(str(e))
         logger.error(f"Modal execution error: {str(e)}")
         raise
+    finally:
+        # Clean up the sandbox
+        if sandbox:
+            start_cleanup = time.time()
+            sandbox.terminate()
+            metrics.add_metric("Cleanup", time.time() - start_cleanup)
