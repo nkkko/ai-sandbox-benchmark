@@ -26,3 +26,6 @@ build/
 # Misc
 *.log
 .DS_Store
+
+# history
+benchmark_history.json
