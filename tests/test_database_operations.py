@@ -1,7 +1,40 @@
+"""
+Test that measures SQLite database performance in the sandbox environment.
+
+This test evaluates database operations including connections, schema creation,
+data insertion, querying, transactions, and concurrent access.
+"""
+from tests.test_utils import create_test_config
+from tests.test_sandbox_utils import get_sandbox_utils
+
 def test_database_operations():
-    # This test should only run once per provider
-    test_database_operations.single_run = True
-    return """import sqlite3
+    """
+    Measures SQLite database operations performance.
+    
+    This test evaluates:
+    - Database connection speed
+    - Schema creation performance
+    - Data insertion rates for multiple tables
+    - Query performance (simple, join, and complex queries)
+    - Transaction handling with commits and rollbacks
+    - Concurrent query execution
+    """
+    # Define test configuration
+    config = create_test_config(
+        env_vars=[],  # No env vars needed
+        single_run=True,  # Only need to run once per benchmark session
+    )
+    
+    # Get the sandbox utilities code
+    utils_code = get_sandbox_utils(
+        include_timer=True,  # Need timing for benchmark
+        include_results=True,  # Need results formatting
+        include_packages=False  # Using only standard library SQLite
+    )
+    
+    # Define the test-specific code
+    test_code = """
+import sqlite3
 import time
 import os
 import random
@@ -372,6 +405,22 @@ def run_database_benchmark():
         "concurrent_throughput": 30/concurrent_time
     }
 
-# Run the database benchmark
-run_database_benchmark()
+@benchmark_timer
+def timed_test():
+    return run_database_benchmark()
+
+# Run the benchmark
+test_result = timed_test()
+
+# Print the results using the utility function
+print_benchmark_results(test_result)
 """
+
+    # Combine the utilities and test code
+    full_code = f"{utils_code}\n\n{test_code}"
+
+    # Return the test configuration and code
+    return {
+        "config": config,
+        "code": full_code
+    }

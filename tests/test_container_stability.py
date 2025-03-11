@@ -1,15 +1,48 @@
+"""
+Test that evaluates container stability under various resource pressures.
+
+This test applies simultaneous CPU, memory, and disk I/O stress to evaluate how
+the sandbox environment performs under sustained load conditions.
+"""
+from tests.test_utils import create_test_config
+from tests.test_sandbox_utils import get_sandbox_utils
+
 def test_container_stability():
-    # This test should only run once per provider
-    test_container_stability.single_run = True
-    return """import time
+    """
+    Evaluates container stability under various resource pressures.
+    
+    This test runs multiple stress tests simultaneously:
+    - CPU load generation with controlled utilization target
+    - Memory pressure with allocation and de-allocation cycles
+    - Disk I/O stress with sustained read/write operations
+    
+    Resource usage is monitored throughout the test to measure stability metrics.
+    """
+    # Define test configuration
+    config = create_test_config(
+        env_vars=[],  # No env vars needed
+        single_run=True,  # Only need to run once per benchmark session
+    )
+    
+    # Get the sandbox utilities code
+    utils_code = get_sandbox_utils(
+        include_timer=True,  # Need timing decorator
+        include_results=True,  # Need results formatting
+        include_packages=True  # Need psutil package
+    )
+    
+    # Define the test-specific code
+    test_code = """
+# Ensure we have psutil
+ensure_packages(["psutil"])
+
+import time
 import os
 import signal
 import threading
 import queue
 import psutil
 import datetime
-import json
-import sys
 from concurrent.futures import ThreadPoolExecutor
 import resource
 
@@ -338,6 +371,22 @@ def combined_stability_test():
     print("\\nTest completed successfully")
     return results
 
-# Run the combined stability test
-combined_stability_test()
+@benchmark_timer
+def timed_test():
+    return combined_stability_test()
+
+# Run the benchmark
+test_result = timed_test()
+
+# Print the results using the utility function
+print_benchmark_results(test_result)
 """
+
+    # Combine the utilities and test code
+    full_code = f"{utils_code}\n\n{test_code}"
+
+    # Return the test configuration and code
+    return {
+        "config": config,
+        "code": full_code
+    }

@@ -4,12 +4,13 @@
 - Run all benchmarks: `python comparator.py`
 - Run specific tests: `python comparator.py --tests 1,2 --providers daytona,e2b`
 - Run single test: `python comparator.py --tests 1 --providers daytona`
+- Run on local machine: `python comparator.py --providers local`
 - Adjust runs: `python comparator.py --runs 5 --warmup-runs 2`
 - Change region: `python comparator.py --target-region us`
 
 ## Testing Setup
 - Start CodeSandbox service first: `cd providers && node codesandbox-service.js`
-- Ensure environment variables are set in .env file
+- Ensure environment variables are set in .env file (not needed when using only the local provider)
 - Some tests will run only once regardless of `--runs` parameter (those with `single_run = True` property)
 
 ## Code Style

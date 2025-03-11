@@ -1,5 +1,39 @@
+"""
+Test that performs resource-intensive calculations to stress test the sandbox.
+
+This test runs multiple CPU, memory, and disk I/O intensive tasks concurrently
+to measure how the sandbox environment handles high resource utilization.
+"""
+from tests.test_utils import create_test_config
+from tests.test_sandbox_utils import get_sandbox_utils
+
 def test_resource_intensive_calculation():
-    return """import hashlib
+    """
+    Performs resource-intensive calculations to stress test the sandbox.
+    
+    This test runs multiple intensive tasks simultaneously:
+    - CPU-intensive prime number calculations and factorial computations
+    - Memory-intensive list operations with large data structures
+    - Disk I/O intensive file read/write operations
+    
+    All tasks run concurrently to maximize resource utilization.
+    """
+    # Define test configuration
+    config = create_test_config(
+        env_vars=[],  # No env vars needed
+        single_run=False,  # Can run multiple times
+    )
+    
+    # Get the sandbox utilities code
+    utils_code = get_sandbox_utils(
+        include_timer=True,  # Need timing for benchmark
+        include_results=True,  # Need results formatting
+        include_packages=False  # No packages needed for this test
+    )
+    
+    # Define the test-specific code
+    test_code = """
+import hashlib
 import os
 import random
 import string
@@ -97,6 +131,23 @@ def run_resource_intensive_tests():
             else:
                 print(result)
 
-if __name__ == "__main__":
+@benchmark_timer
+def timed_test():
     run_resource_intensive_tests()
+    return "Completed resource intensive calculations"
+
+# Run the benchmark
+test_result = timed_test()
+
+# Print the results using the utility function
+print_benchmark_results(test_result)
 """
+
+    # Combine the utilities and test code
+    full_code = f"{utils_code}\n\n{test_code}"
+
+    # Return the test configuration and code
+    return {
+        "config": config,
+        "code": full_code
+    }

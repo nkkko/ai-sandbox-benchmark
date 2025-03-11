@@ -8,17 +8,27 @@ from typing import Dict, List, Optional, Any
 
 class EnhancedTimingMetrics:
     def __init__(self):
+        # Initialize with common metrics but allow dynamic addition
         self.metrics = {
             "Workspace Creation": [],
             "Code Execution": [],
+            "Internal Execution": [],
             "Cleanup": []
         }
+        # List of metrics that are already in milliseconds and don't need conversion
+        self.ms_metrics = {"Internal Execution"}
         self.errors = []
 
     def add_metric(self, name: str, time_value: float):
-        if name in self.metrics:
-            # Convert to milliseconds
-            self.metrics[name].append(time_value * 1000)
+        # Dynamically add the metric if it doesn't exist
+        if name not in self.metrics:
+            self.metrics[name] = []
+            
+        # Convert to milliseconds if not already in ms
+        if name not in self.ms_metrics:
+            time_value = time_value * 1000
+            
+        self.metrics[name].append(time_value)
 
     def add_error(self, error: str):
         self.errors.append(error)
@@ -36,7 +46,57 @@ class EnhancedTimingMetrics:
         return stats_dict
 
     def get_total_time(self) -> float:
-        return sum(np.mean(times) for times in self.metrics.values() if times)
+        # Standard metrics that should be included in total time
+        standard_keys = [
+            "Workspace Creation", 
+            "Setup Time",
+            "Dependency Installation",
+            "Environment Setup",
+            "Code Execution", 
+            "Cleanup"
+        ]
+        
+        # Skip Internal Execution and other metrics when calculating total time
+        # Sum only the standard metrics that exist
+        return sum(np.mean(self.metrics[key]) for key in standard_keys 
+                  if key in self.metrics and self.metrics[key])
+
+
+class BenchmarkTimingMetrics(EnhancedTimingMetrics):
+    """Extended metrics class with support for extracting internal timing data from test output."""
+    
+    def extract_internal_timing(self, output):
+        """Extract timing data from standardized output format."""
+        try:
+            # Convert logs objects from E2B to string
+            if hasattr(output, 'stdout') and isinstance(output.stdout, list):
+                output_str = '\n'.join(output.stdout)
+            else:
+                output_str = str(output)
+                
+            # Look for the benchmark timing data markers
+            start_marker = "--- BENCHMARK TIMING DATA ---"
+            end_marker = "--- END BENCHMARK TIMING DATA ---"
+            
+            if start_marker in output_str and end_marker in output_str:
+                # Extract the JSON part between the markers
+                start_idx = output_str.find(start_marker) + len(start_marker)
+                end_idx = output_str.find(end_marker)
+                json_data = output_str[start_idx:end_idx].strip()
+                
+                # Parse the JSON data
+                import json
+                timing_data = json.loads(json_data)
+                
+                # Add the internal execution time metric
+                if "internal_execution_time_ms" in timing_data:
+                    self.add_metric("Internal Execution", timing_data["internal_execution_time_ms"])
+                    return True
+            
+            return False
+        except Exception as e:
+            print(f"Error extracting internal timing: {e}")
+            return False
     
     def to_dict(self) -> Dict:
         """Convert metrics to a serializable dictionary for storage"""

@@ -1,7 +1,39 @@
+"""
+Test that measures the performance of Python package installation.
+
+This test evaluates how quickly different types of packages can be installed
+and imported in the sandbox environment.
+"""
+from tests.test_utils import create_test_config
+from tests.test_sandbox_utils import get_sandbox_utils
+
 def test_package_installation():
-    # This test should only run once per provider
-    test_package_installation.single_run = True
-    return """import time
+    """
+    Measures the performance of Python package installation.
+    
+    This test:
+    - Installs both simple and complex Python packages
+    - Times the installation process
+    - Verifies successful installation by importing packages
+    - Measures import time
+    - Reports summary statistics
+    """
+    # Define test configuration
+    config = create_test_config(
+        env_vars=[],  # No env vars needed
+        single_run=True,  # Only need to run once per benchmark session
+    )
+    
+    # Get the sandbox utilities code
+    utils_code = get_sandbox_utils(
+        include_timer=True,  # Need timing for benchmark
+        include_results=True,  # Need results formatting
+        include_packages=False  # We'll handle package installation manually
+    )
+    
+    # Define the test-specific code
+    test_code = """
+import time
 import subprocess
 import sys
 
@@ -111,6 +143,22 @@ def run_package_tests():
     
     return results
 
-# Run the tests
-run_package_tests()
+@benchmark_timer
+def timed_test():
+    return run_package_tests()
+
+# Run the benchmark
+test_result = timed_test()
+
+# Print the results using the utility function
+print_benchmark_results(test_result)
 """
+
+    # Combine the utilities and test code
+    full_code = f"{utils_code}\n\n{test_code}"
+
+    # Return the test configuration and code
+    return {
+        "config": config,
+        "code": full_code
+    }

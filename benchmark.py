@@ -66,7 +66,12 @@ def run_plain_benchmark(test_ids, providers, runs, warmup_runs, region):
     
     # Run the benchmark using asyncio
     import asyncio
-    loop = asyncio.get_running_loop()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
     results = loop.run_until_complete(executor.run_comparison(
         tests_to_run,
         providers,
@@ -78,8 +83,10 @@ def run_plain_benchmark(test_ids, providers, runs, warmup_runs, region):
     visualizer = comp.ResultsVisualizer()
     visualizer.print_detailed_comparison(results, tests_to_run, runs, warmup_runs, providers)
     
-    print("\nBenchmark finished. Press Enter to return to main menu...")
-    input()
+    # In CLI mode, we don't need to wait for input
+    if not '--cli' in sys.argv:
+        print("\nBenchmark finished. Press Enter to return to main menu...")
+        input()
 
 
 class BenchmarkTUI:
@@ -106,7 +113,7 @@ class BenchmarkTUI:
         self.region = "eu"
 
         # Available providers and tests
-        self.providers = ["daytona", "e2b", "codesandbox", "modal"]
+        self.providers = ["daytona", "e2b", "codesandbox", "modal", "local"]
         self.selected_providers = ["daytona"]  # Select all by default
         self.selected_tests = [1]  # Start with just the first test selected
 
@@ -1015,7 +1022,7 @@ def parse_args():
                       help='Run in command-line mode instead of TUI')
     parser.add_argument('--tests', '-t', type=str, default='all',
                       help='Comma-separated list of test IDs to run (or "all" for all tests)')
-    parser.add_argument('--providers', '-p', type=str, default='daytona,e2b,codesandbox,modal',
+    parser.add_argument('--providers', '-p', type=str, default='daytona,e2b,codesandbox,modal,local',
                       help='Comma-separated list of providers to test')
     parser.add_argument('--runs', '-r', type=int, default=1,
                       help='Number of measurement runs per test/provider')

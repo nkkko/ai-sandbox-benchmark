@@ -1,7 +1,41 @@
+"""
+Test that measures Python startup time for various import scenarios.
+
+This test evaluates how quickly Python starts up in the sandbox under different
+conditions, including with standard libraries and popular packages.
+"""
+from tests.test_utils import create_test_config
+from tests.test_sandbox_utils import get_sandbox_utils
+
 def test_startup_time():
-    # This test should only run once per provider
-    test_startup_time.single_run = True
-    return """import time
+    """
+    Measures Python startup time for various import scenarios.
+    
+    This test:
+    - Measures basic Python interpreter startup time
+    - Tests startup with various standard library imports
+    - Evaluates startup time for scientific libraries (NumPy, Pandas)
+    - Checks startup time for ML/AI libraries (TensorFlow, PyTorch)
+    - Tests web framework and database library startup times
+    - Reports comprehensive timing information
+    """
+    # Define test configuration
+    config = create_test_config(
+        env_vars=[],  # No env vars needed
+        single_run=True,  # Only run once per benchmark session
+        is_info_test=True  # This is more of an informational test
+    )
+    
+    # Get the sandbox utilities code
+    utils_code = get_sandbox_utils(
+        include_timer=False,  # We'll handle timing manually in this test
+        include_results=False,  # We'll format results manually
+        include_packages=False  # We don't need to install packages for this test itself
+    )
+    
+    # Define the test-specific code
+    test_code = """
+import time
 import os
 import sys
 import subprocess
@@ -44,8 +78,11 @@ print('Imports completed')
 def measure_numpy_startup():
     # Measure startup time with NumPy import
     script = '''
-import numpy as np
-print(f"NumPy version: {np.__version__}")
+try:
+    import numpy as np
+    print(f"NumPy version: {np.__version__}")
+except ImportError:
+    print("NumPy not installed")
 '''
     start_time = time.time()
     result = subprocess.run([sys.executable, "-c", script],
@@ -55,6 +92,8 @@ print(f"NumPy version: {np.__version__}")
     output = result.stdout.decode()
     error = result.stderr.decode()
     
+    if "not installed" in output:
+        return None, "NumPy not installed"
     if result.returncode != 0:
         return None, error
     return end_time - start_time, output
@@ -62,8 +101,11 @@ print(f"NumPy version: {np.__version__}")
 def measure_pandas_startup():
     # Measure startup time with Pandas import
     script = '''
-import pandas as pd
-print(f"Pandas version: {pd.__version__}")
+try:
+    import pandas as pd
+    print(f"Pandas version: {pd.__version__}")
+except ImportError:
+    print("Pandas not installed")
 '''
     start_time = time.time()
     result = subprocess.run([sys.executable, "-c", script],
@@ -73,6 +115,8 @@ print(f"Pandas version: {pd.__version__}")
     output = result.stdout.decode()
     error = result.stderr.decode()
     
+    if "not installed" in output:
+        return None, "Pandas not installed"
     if result.returncode != 0:
         return None, error
     return end_time - start_time, output
@@ -343,5 +387,21 @@ def run_startup_time_tests():
     return results
 
 # Run the startup time tests
-run_startup_time_tests()
+results = run_startup_time_tests()
+
+# Record timing information for benchmark
+print("\\n\\n--- BENCHMARK TIMING DATA ---")
+print(json.dumps({
+    "internal_execution_time_ms": results.get('standard_imports', 0) * 1000  # Use standard imports time as the benchmark
+}))
+print("--- END BENCHMARK TIMING DATA ---")
 """
+
+    # Combine the utilities and test code
+    full_code = f"{utils_code}\n\n{test_code}"
+
+    # Return the test configuration and code
+    return {
+        "config": config,
+        "code": full_code
+    }
