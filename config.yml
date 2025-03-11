@@ -1,0 +1,33 @@
+# AI Sandbox Benchmark Configuration
+
+# Environment variables to pass to sandboxes
+env_vars:
+  # List of environment variables that should be passed from host to sandbox
+  pass_to_sandbox:
+    - OPENAI_API_KEY
+    - ANTHROPIC_API_KEY
+    # Add more environment variables as needed
+    # - OTHER_API_KEY
+    # - DATABASE_URL
+  
+  # IMPORTANT: Never add actual API keys in this file!
+  # Set them in your .env file instead and they will be passed automatically
+  # Example .env:
+  # OPENAI_API_KEY=sk-...your_key_here...
+
+# Test configuration
+tests:
+  # Default test parameters
+  warmup_runs: 1
+  measurement_runs: 10
+  
+# Provider configuration
+providers:
+  daytona:
+    default_region: eu
+  e2b:
+    # E2B specific configuration
+  codesandbox:
+    # CodeSandbox specific configuration
+  modal:
+    # Modal specific configuration

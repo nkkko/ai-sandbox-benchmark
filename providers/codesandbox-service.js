@@ -52,13 +52,17 @@ app.post('/execute', async (req, res) => {
     const requestId = Math.random().toString(36).substring(7);
     log(`[${requestId}] Starting code execution request`);
 
-    const { code } = req.body;
+    const { code, env_vars } = req.body;
     if (!code) {
         log(`[${requestId}] No code provided in request`, 'error');
         return res.status(400).json({ error: 'No code provided' });
     }
 
     log(`[${requestId}] Code to execute: ${code.substring(0, 100)}${code.length > 100 ? '...' : ''}`);
+    
+    if (env_vars) {
+        log(`[${requestId}] Environment variables provided: ${Object.keys(env_vars).join(', ')}`);
+    }
 
     const startTime = Date.now();
     const metrics = {
@@ -76,6 +80,56 @@ app.post('/execute', async (req, res) => {
         metrics.workspaceCreation = Date.now() - createStart; // Measure workspace creation time
         log(`[${requestId}] Sandbox created successfully in ${metrics.workspaceCreation}ms`);
 
+        // Pass environment variables to the sandbox if provided
+        if (env_vars && Object.keys(env_vars).length > 0) {
+            log(`[${requestId}] Setting up environment variables in sandbox`);
+            
+            let envSetupCode = "import os;\n";
+            for (const [key, value] of Object.entries(env_vars)) {
+                log(`[${requestId}] Setting ${key} in sandbox`);
+                envSetupCode += `os.environ['${key}'] = '${value}';\n`;
+            }
+            
+            await sandbox.shells.python.run(envSetupCode);
+        }
+        
+        // Check for dependencies and install them if needed
+        log(`[${requestId}] Checking for dependencies in code...`);
+        const dependencyCheckerCode = `
+import re, sys, subprocess
+
+def extract_imports(code):
+    # Extract all import statements
+    import_pattern = re.compile(r'^(?:from|import)\\s+([a-zA-Z0-9_]+)', re.MULTILINE)
+    return set(import_pattern.findall(code))
+
+def check_and_install_dependencies(code):
+    # Get all imports
+    imports = extract_imports(code)
+    
+    # Skip standard library modules
+    std_lib_modules = set(sys.modules.keys()) & imports
+    third_party_modules = imports - std_lib_modules
+    
+    for module in third_party_modules:
+        try:
+            __import__(module)
+            print(f"✓ Module '{module}' is already installed")
+        except ImportError:
+            print(f"⚠ Module '{module}' not found, installing...")
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", module])
+                print(f"✓ Successfully installed '{module}'")
+            except subprocess.CalledProcessError as e:
+                print(f"✗ Failed to install '{module}': {str(e)}")
+
+# The code string is passed in with triple quotes to handle any internal quotes
+check_and_install_dependencies('''${code.replace(/'/g, "\\'")}''')
+`;
+
+        const dependencyResult = await sandbox.shells.python.run(dependencyCheckerCode);
+        log(`[${requestId}] Dependency check output: ${dependencyResult.output}`);
+        
         const execStart = Date.now();
         log(`[${requestId}] Executing code in sandbox`);
         const result = await sandbox.shells.python.run(code);

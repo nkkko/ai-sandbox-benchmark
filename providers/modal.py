@@ -1,48 +1,77 @@
 # providers/modal.py
 
-import time, asyncio, logging
+import time, asyncio, logging, os, inspect
+from typing import Dict, Any
 import modal
 from metrics import EnhancedTimingMetrics
 
 logger = logging.getLogger(__name__)
 
-async def execute(code: str):
+async def execute(code: str, env_vars: Dict[str, str] = None):
     metrics = EnhancedTimingMetrics()
-    sandbox = None
-    app = None
     try:
         logger.info("Creating Modal sandbox...")
         start = time.time()
-        app = modal.App.lookup("code-comparison", create_if_missing=True)
-        sandbox = modal.Sandbox.create(
-            image=modal.Image.debian_slim().pip_install("numpy", "pandas"),
-            app=app
-        )
-        metrics.add_metric("Workspace Creation", time.time() - start)
 
-        logger.info("Executing code in Modal...")
-        start = time.time()
-        # Write code to a temporary file
-        with open("/tmp/modal_code.py", "w") as f:
-            f.write(code)
-        process = sandbox.exec("python", "/tmp/modal_code.py")
-        output = process.stdout.read()
-        metrics.add_metric("Code Execution", time.time() - start)
+        # Create a function in Modal that will execute our code
+        # Use the approach from the original implementation but incorporate sandbox concepts
+        @modal.function(
+            image=modal.Image.debian_slim().pip_install("numpy", "pandas"),
+            secrets=[modal.Secret.from_dict({k: v for k, v in (env_vars or {}).items()})] if env_vars else None
+        )
+        def run_code_in_modal():
+            import sys
+            import subprocess
+            import os
+            import tempfile
+            
+            # Set up environment variables inside the function
+            if env_vars:
+                for k, v in env_vars.items():
+                    os.environ[k] = v
+            
+            # Write code to a file
+            with open("/tmp/code.py", "w") as f:
+                f.write(code)
+            
+            # Create a container-like sandbox environment
+            # This simulates the sandbox behavior within the Modal function
+            os.makedirs("/sandbox", exist_ok=True)
+            
+            # Run the code and capture output
+            result = subprocess.run(
+                [sys.executable, "/tmp/code.py"],
+                capture_output=True,
+                text=True,
+                cwd="/sandbox"  # Run in the sandbox directory
+            )
+            
+            return {
+                "success": result.returncode == 0,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "returncode": result.returncode
+            }
+        
+        # Run the Modal function
+        logger.info("Running code in Modal...")
+        metrics.add_metric("Workspace Creation", time.time() - start)
+        
+        start_exec = time.time()
+        result = run_code_in_modal.call()
+        metrics.add_metric("Code Execution", time.time() - start_exec)
+        
+        # Extract the output
+        if isinstance(result, dict) and "stdout" in result:
+            output = result["stdout"]
+            if result.get("stderr"):
+                logger.info(f"Stderr from Modal execution: {result['stderr']}")
+        else:
+            output = str(result)
+        
         return output, metrics
 
     except Exception as e:
         metrics.add_error(str(e))
         logger.error(f"Modal execution error: {str(e)}")
         raise
-
-    finally:
-        if sandbox:
-            start = time.time()
-            try:
-                logger.info("Cleaning up Modal sandbox...")
-                sandbox.terminate()
-                logger.info("Modal cleanup completed")
-                metrics.add_metric("Cleanup", time.time() - start)
-            except Exception as e:
-                logger.error(f"Modal cleanup error: {str(e)}")
-                metrics.add_error(f"Cleanup error: {str(e)}")

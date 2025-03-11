@@ -1,18 +1,26 @@
 # providers/codesandbox.py
 
 import time, logging, requests, os
+from typing import Dict, Any
 from metrics import EnhancedTimingMetrics
 
 logger = logging.getLogger(__name__)
 
-async def execute(code: str):
+async def execute(code: str, env_vars: Dict[str, str] = None):
     metrics = EnhancedTimingMetrics()
     try:
         logger.info("Sending request to CodeSandbox...")
         start = time.time()
+        
+        # Include environment variables in the request if provided
+        request_data = {'code': code}
+        if env_vars and len(env_vars) > 0:
+            request_data['env_vars'] = env_vars
+            logger.info(f"Passing {len(env_vars)} environment variables to CodeSandbox")
+            
         response = requests.post(
             'http://localhost:3000/execute',
-            json={'code': code},
+            json=request_data,
             timeout=60
         )
         logger.info(f"CodeSandbox response status: {response.status_code}")

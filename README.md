@@ -91,6 +91,28 @@ ai-sandbox-benchmark
    CSB_API_KEY=your_codesandbox_api_key
    ```
 
+6. **Configure Sandbox Settings (Optional)**
+
+   The `config.yml` file allows you to customize various aspects of the benchmark, including which environment variables are passed to sandbox environments:
+
+   ```yaml
+   # Environment variables to pass to sandboxes
+   env_vars:
+     pass_to_sandbox:
+       - OPENAI_API_KEY
+       # Add other variables as needed
+   
+   # Test configuration
+   tests:
+     warmup_runs: 1
+     measurement_runs: 10
+   
+   # Provider-specific settings
+   providers:
+     daytona:
+       default_region: eu
+   ```
+
 ## 🏃 Usage
 
 ### Start the CodeSandbox Service
@@ -100,6 +122,22 @@ Before running benchmarks with CodeSandbox, ensure the CodeSandbox service is ac
 ```bash
 node providers/codesandbox-service.js
 ```
+
+### Available Tests
+
+The benchmark includes the following tests:
+
+1. **Calculate Primes** - Calculates the first 10 prime numbers, their sum and average
+2. **Resource Intensive Calculation** - Runs CPU, memory, and disk-intensive tasks to stress test the environment
+3. **Package Installation** - Measures installation and import time for simple and complex Python packages
+4. **File I/O Performance** - Benchmarks file operations with different file sizes and formats
+5. **Startup Time** - Measures Python interpreter and library startup times
+6. **LLM Generated Primes** - Generates code using an LLM to calculate prime numbers
+7. **Database Operations** - Tests SQLite database performance for various operations
+8. **Container Stability** - Measures stability under combined CPU, memory, and disk load
+9. **List Directory** - Basic system command execution test using ls command
+10. **System Info** - Gathers detailed system information about the environment
+11. **FFT Performance** - Benchmarks Fast Fourier Transform computation speed
 
 ### Run Benchmarks
 

@@ -11,7 +11,8 @@ from dotenv import load_dotenv
 from termcolor import colored
 from tabulate import tabulate
 import numpy as np
-from typing import Dict, Any, Callable, List, Tuple
+import yaml
+from typing import Dict, Any, Callable, List, Tuple, Optional
 import requests
 
 # Import EnhancedTimingMetrics from metrics instead of from comparator (avoids circular dependency)
@@ -96,34 +97,79 @@ class SandboxExecutor:
         self.measurement_runs = measurement_runs
         self.num_concurrent_providers = num_concurrent_providers
         load_dotenv()
+        self.config = self._load_config()
         self._validate_environment()
         
         logger.info(f"Initialized SandboxExecutor with {num_concurrent_providers} concurrent providers, "
                    f"{warmup_runs} warmup runs, and {measurement_runs} measurement runs")
+    
+    def _load_config(self) -> Dict[str, Any]:
+        """Load configuration from config.yml file."""
+        config_path = os.path.join(os.path.dirname(__file__), 'config.yml')
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    config = yaml.safe_load(f)
+                logger.info("Loaded configuration from config.yml")
+                return config
+            else:
+                logger.warning("config.yml not found, using default configuration")
+                return {}
+        except Exception as e:
+            logger.error(f"Error loading config.yml: {e}")
+            return {}
+    
+    def get_sandbox_env_vars(self) -> Dict[str, str]:
+        """Get environment variables that should be passed to sandboxes."""
+        env_vars = {}
+        try:
+            if self.config and 'env_vars' in self.config and 'pass_to_sandbox' in self.config['env_vars']:
+                for var_name in self.config['env_vars']['pass_to_sandbox']:
+                    if var_name in os.environ:
+                        env_vars[var_name] = os.environ[var_name]
+                        logger.info(f"Will pass {var_name} to sandboxes")
+        except Exception as e:
+            logger.error(f"Error getting sandbox env vars: {e}")
+        return env_vars
 
     def _validate_environment(self):
         required_vars = {
-            "OPENAI_API_KEY": "OpenAI API key",
             "DAYTONA_API_KEY": "Daytona API key",
             "DAYTONA_SERVER_URL": "Daytona server URL",
             "CSB_API_KEY": "CodeSandbox API key"
+        }
+        # Optional but useful API keys
+        optional_vars = {
+            "OPENAI_API_KEY": "OpenAI API key",
+            "ANTHROPIC_API_KEY": "Anthropic API key"
         }
         for var, description in required_vars.items():
             value = os.getenv(var)
             if not value:
                 raise ValueError(f"Missing {description} in environment variables: {var}")
             logger.info(f"Found {description}")
+            
+        # Check for optional API keys
+        for var, description in optional_vars.items():
+            value = os.getenv(var)
+            if value:
+                logger.info(f"Found {description}")
+            else:
+                logger.info(f"Did not find {description}")
 
     async def run_test_on_provider(self, test_code_func: Callable, provider: str, executor: ThreadPoolExecutor, target_region: str) -> Tuple[str, Dict[str, Any], Any]:
         results = {'metrics': EnhancedTimingMetrics(), 'output': None}
         try:
             code = test_code_func()
+            env_vars = self.get_sandbox_env_vars()
             logger.info(f"Executing test on {provider}...")
+            
             if provider == "daytona":
                 # Daytona requires additional parameters: executor and target_region.
-                output, metrics = await provider_executors[provider](code, executor, target_region)
+                output, metrics = await provider_executors[provider](code, executor, target_region, env_vars)
             else:
-                output, metrics = await provider_executors[provider](code)
+                output, metrics = await provider_executors[provider](code, env_vars)
+                
             # Merge metrics from executed provider into our results
             for metric_name, metric_values in metrics.metrics.items():
                 if metric_values:
