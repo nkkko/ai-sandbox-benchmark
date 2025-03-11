@@ -1,0 +1,63 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: Python style and documentation guidelines
+globs: ["*.py", "providers/*.py"]
+alwaysApply: false
+---
+# Python Style Guide
+
+Guidelines for consistent Python coding style and documentation practices
+
+```rule
+id: function-docstring
+name: Function Docstring
+description: All public functions should have a docstring
+pattern: def [a-z][a-zA-Z0-9_]*\([^)]*\):\s+(?:"""|''')
+severity: warning
+```
+
+```rule
+id: variable-naming
+name: Variable Naming Convention
+description: Variables should be in snake_case
+pattern: ^[a-z][a-z0-9_]*\s*=
+severity: info
+```
+
+```rule
+id: line-length
+name: Line Length
+description: Lines should not be too long
+pattern: ^.{0,100}$
+severity: info
+```
+
+```rule
+id: class-naming
+name: Class Naming Convention
+description: Classes should be in PascalCase
+pattern: ^class\s+[A-Z][a-zA-Z0-9_]*
+severity: warning
+```
+
+```rule
+id: empty-line-after-function
+name: Empty Line After Function
+description: There should be an empty line after function definitions
+pattern: def [a-zA-Z0-9_]*\([^)]*\):[^#\n]*\n\s*\n
+severity: info
+```
+
+```rule
+id: import-order
+name: Import Order
+description: Standard library imports should come before third-party imports
+pattern: import\s+(?:os|sys|re|time|json|csv|math|random|datetime|pathlib|typing|collections|functools|itertools)
+severity: info
+```
+
+exclusions: ["venv/**/*.py", "__pycache__/**/*.py"]

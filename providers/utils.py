@@ -34,9 +34,25 @@ def extract_imports(code: str) -> Set[str]:
     Returns:
         Set[str]: A set of imported module names
     """
+    imports = set()
+    
+    # Check for base64 encoded content
+    base64_pattern = r'__import__\("base64"\)\.b64decode\("([^"]+)"\)'
+    base64_matches = re.findall(base64_pattern, code)
+    
+    # Decode any base64 content and extract imports from it too
+    for match in base64_matches:
+        try:
+            import base64
+            decoded_code = base64.b64decode(match).decode('utf-8')
+            # Recursively extract imports from the decoded content
+            decoded_imports = extract_imports(decoded_code)
+            imports.update(decoded_imports)
+        except Exception as e:
+            print(f"Warning: Failed to decode base64 content: {e}")
+    
     # This regex pattern captures both 'import x' and 'from x import y' style imports
     pattern = r'^(?:from|import)\s+([a-zA-Z0-9_]+)'
-    imports = set()
     
     for line in code.split('\n'):
         match = re.match(pattern, line.strip())

@@ -32,7 +32,7 @@ for filename in os.listdir(TESTS_DIR):
                 test_id += 1
 
 # Import providers from separate modules
-from providers import daytona, e2b, codesandbox, modal
+from providers import daytona, e2b, codesandbox, modal, local
 
 # Map provider names to their corresponding execute() implementations.
 # Note: the daytona.execute() requires (code, executor, target_region).
@@ -40,7 +40,8 @@ provider_executors = {
     'daytona': daytona.execute,
     'e2b': e2b.execute,
     'codesandbox': codesandbox.execute,
-    'modal': modal.execute
+    'modal': modal.execute,
+    'local': local.execute
 }
 
 # Configure logging
@@ -48,40 +49,22 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
+
+# Create logger
 logger = logging.getLogger(__name__)
 
+# Create helper function for benchmarking logs
+def log_benchmark(message):
+    """Log a message with the benchmark prefix."""
+    logger.info(f"[Benchmark] {message}")
 
-class EnhancedTimingMetrics:
-    def __init__(self):
-        self.metrics = {
-            "Workspace Creation": [],
-            "Code Execution": [],
-            "Cleanup": []
-        }
-        self.errors = []
-
-    def add_metric(self, name: str, time_value: float):
-        if name in self.metrics:
-            # Convert to milliseconds
-            self.metrics[name].append(time_value * 1000)
-
-    def add_error(self, error: str):
-        self.errors.append(error)
-
-    def get_statistics(self) -> Dict[str, Dict[str, float]]:
-        stats_dict = {}
-        for name, measurements in self.metrics.items():
-            if measurements:
-                stats_dict[name] = {
-                    'mean': np.mean(measurements),
-                    'std': np.std(measurements),
-                    'min': np.min(measurements),
-                    'max': np.max(measurements)
-                }
-        return stats_dict
-
-    def get_total_time(self) -> float:
-        return sum(np.mean(times) for times in self.metrics.values() if times)
+# Create provider-specific logging helpers
+def log_provider(provider, message):
+    """Log a message with a specific provider prefix."""
+    logger.info(f"[{provider.capitalize()}] {message}")
+    
+# Import the metrics classes from metrics.py
+from metrics import EnhancedTimingMetrics, BenchmarkTimingMetrics
 
 
 class SandboxExecutor:
@@ -96,11 +79,13 @@ class SandboxExecutor:
         self.warmup_runs = warmup_runs
         self.measurement_runs = measurement_runs
         self.num_concurrent_providers = num_concurrent_providers
+        # Store dedicated thread pools for providers that need them
+        self.provider_executors = {}
         load_dotenv()
         self.config = self._load_config()
         self._validate_environment()
         
-        logger.info(f"Initialized SandboxExecutor with {num_concurrent_providers} concurrent providers, "
+        log_benchmark(f"Initialized SandboxExecutor with {num_concurrent_providers} concurrent providers, "
                    f"{warmup_runs} warmup runs, and {measurement_runs} measurement runs")
     
     def _load_config(self) -> Dict[str, Any]:
@@ -110,13 +95,13 @@ class SandboxExecutor:
             if os.path.exists(config_path):
                 with open(config_path, 'r') as f:
                     config = yaml.safe_load(f)
-                logger.info("Loaded configuration from config.yml")
+                log_benchmark("Loaded configuration from config.yml")
                 return config
             else:
-                logger.warning("config.yml not found, using default configuration")
+                log_benchmark("config.yml not found, using default configuration")
                 return {}
         except Exception as e:
-            logger.error(f"Error loading config.yml: {e}")
+            log_benchmark(f"Error loading config.yml: {e}")
             return {}
     
     def get_sandbox_env_vars(self) -> Dict[str, str]:
@@ -127,111 +112,318 @@ class SandboxExecutor:
                 for var_name in self.config['env_vars']['pass_to_sandbox']:
                     if var_name in os.environ:
                         env_vars[var_name] = os.environ[var_name]
-                        logger.info(f"Will pass {var_name} to sandboxes")
+                        log_benchmark(f"Will pass {var_name} to sandboxes")
         except Exception as e:
-            logger.error(f"Error getting sandbox env vars: {e}")
+            log_benchmark(f"Error getting sandbox env vars: {e}")
         return env_vars
 
     def _validate_environment(self):
-        required_vars = {
-            "DAYTONA_API_KEY": "Daytona API key",
-            "DAYTONA_SERVER_URL": "Daytona server URL",
-            "CSB_API_KEY": "CodeSandbox API key"
+        # Get selected providers from command line args or use default
+        selected_providers = []
+        try:
+            import sys
+            for i, arg in enumerate(sys.argv):
+                if arg == '--providers' or arg == '-p':
+                    if i + 1 < len(sys.argv):
+                        selected_providers = sys.argv[i + 1].split(',')
+                        break
+        except Exception as e:
+            log_benchmark(f"Error getting selected providers from command line: {e}")
+        
+        # Required vars for different providers
+        provider_required_vars = {
+            'daytona': {
+                "DAYTONA_API_KEY": "Daytona API key",
+                "DAYTONA_SERVER_URL": "Daytona server URL",
+            },
+            'codesandbox': {
+                "CSB_API_KEY": "CodeSandbox API key"
+            },
+            'e2b': {},
+            'modal': {},
+            'local': {}
         }
+        
+        # Determine which required vars to check based on selected providers
+        required_vars = {}
+        if not selected_providers or 'local' in selected_providers and len(selected_providers) == 1:
+            log_benchmark("Only local provider selected, skipping API key validation")
+        else:
+            # Add required vars for all selected providers
+            for provider in selected_providers:
+                if provider in provider_required_vars:
+                    required_vars.update(provider_required_vars[provider])
+            
+            # If no providers specified, check all required vars
+            if not selected_providers:
+                for provider_vars in provider_required_vars.values():
+                    required_vars.update(provider_vars)
+            
+            # Check required vars
+            for var, description in required_vars.items():
+                value = os.getenv(var)
+                if not value:
+                    raise ValueError(f"Missing {description} in environment variables: {var}")
+                log_benchmark(f"Found {description}")
+        
         # Optional but useful API keys
         optional_vars = {
             "OPENAI_API_KEY": "OpenAI API key",
             "ANTHROPIC_API_KEY": "Anthropic API key"
         }
-        for var, description in required_vars.items():
-            value = os.getenv(var)
-            if not value:
-                raise ValueError(f"Missing {description} in environment variables: {var}")
-            logger.info(f"Found {description}")
-            
+        
         # Check for optional API keys
         for var, description in optional_vars.items():
             value = os.getenv(var)
             if value:
-                logger.info(f"Found {description}")
+                log_benchmark(f"Found {description}")
             else:
-                logger.info(f"Did not find {description}")
+                log_benchmark(f"Did not find {description}")
+
+    async def _run_single_provider_tests(
+        self,
+        provider: str,
+        tests: Dict[int, Callable],
+        single_run_tests: Dict[int, Callable],
+        multi_run_tests: Dict[int, Callable],
+        measurement_runs: int,
+        target_region: str,
+        executor: ThreadPoolExecutor
+    ) -> List[Tuple[str, int, int, Any]]:
+        """
+        Run all tests for a single provider sequentially.
+        
+        Returns:
+            List of tuples (provider, test_id, run_num, result)
+        """
+        results = []
+        
+        # First run single-run tests
+        if single_run_tests:
+            log_benchmark(f"Running single-run tests for {provider}")
+            for test_id, test_func in single_run_tests.items():
+                log_benchmark(f"Running test {test_id} for {provider} (single run)")
+                result = await self.run_test_on_provider(test_func, provider, executor, target_region)
+                results.append((provider, test_id, 1, result))
+                
+        # Then run multi-run tests
+        if multi_run_tests:
+            log_benchmark(f"Running {measurement_runs} measurement runs for {provider}")
+            for run in range(measurement_runs):
+                run_num = run + 1
+                for test_id, test_func in multi_run_tests.items():
+                    log_benchmark(f"Running test {test_id}, run {run_num} for {provider}")
+                    result = await self.run_test_on_provider(test_func, provider, executor, target_region)
+                    results.append((provider, test_id, run_num, result))
+        
+        return results
 
     async def run_test_on_provider(self, test_code_func: Callable, provider: str, executor: ThreadPoolExecutor, target_region: str) -> Tuple[str, Dict[str, Any], Any]:
-        results = {'metrics': EnhancedTimingMetrics(), 'output': None}
+        metrics = BenchmarkTimingMetrics()
+        results = {'metrics': metrics, 'output': None}
         try:
-            code = test_code_func()
-            env_vars = self.get_sandbox_env_vars()
-            logger.info(f"Executing test on {provider}...")
+            # Get test code and configuration
+            test_data = test_code_func()
+            
+            # Handle both old format (string) and new format (dict with config)
+            if isinstance(test_data, str):
+                # Legacy format - just code as a string
+                code = test_data
+                # Use default env vars
+                env_vars = self.get_sandbox_env_vars()
+            else:
+                # New format with config
+                code = test_data['code']
+                config = test_data.get('config', {})
+                
+                # Check if this test needs specific env vars
+                required_env_vars = config.get('env_vars', [])
+                if required_env_vars:
+                    # Filter environment variables to only those required by this test
+                    env_vars = {}
+                    for var_name in required_env_vars:
+                        if var_name in os.environ:
+                            env_vars[var_name] = os.environ[var_name]
+                            log_benchmark(f"Passing {var_name} to {provider} for this test")
+                else:
+                    # No specific env vars required, pass empty dict
+                    env_vars = {}
+            
+            log_provider(provider, f"Executing test...")
             
             if provider == "daytona":
                 # Daytona requires additional parameters: executor and target_region.
-                output, metrics = await provider_executors[provider](code, executor, target_region, env_vars)
+                output, provider_metrics = await provider_executors[provider](code, executor, target_region, env_vars)
+            elif provider == "local":
+                # Local provider doesn't need to be awaited as it will use subprocess
+                output, provider_metrics = await provider_executors[provider](code, env_vars)
             else:
-                output, metrics = await provider_executors[provider](code, env_vars)
+                output, provider_metrics = await provider_executors[provider](code, env_vars)
                 
-            # Merge metrics from executed provider into our results
-            for metric_name, metric_values in metrics.metrics.items():
-                if metric_values:
-                    results['metrics'].metrics[metric_name].extend(metric_values)
+            # Ensure the provider metrics are properly handled
+            if hasattr(provider_metrics, 'metrics'):
+                # Copy all metrics from provider to our results
+                for metric_name, metric_values in provider_metrics.metrics.items():
+                    if metric_values:
+                        if metric_name not in metrics.metrics:
+                            metrics.metrics[metric_name] = []
+                        metrics.metrics[metric_name].extend(metric_values)
+                
+                # Copy any errors from provider to our results
+                if hasattr(provider_metrics, 'errors'):
+                    for error in provider_metrics.errors:
+                        metrics.add_error(error)
+            
+            # Extract and add internal timing data from the test output
+            if output:
+                internal_timing_extracted = metrics.extract_internal_timing(output)
+                if internal_timing_extracted:
+                    log_provider(provider, f"Extracted internal timing data from test output")
+            
             results['output'] = output
-            logger.info(f"Completed {provider} execution")
+            log_provider(provider, f"Completed execution")
             return provider, results, None
         except Exception as e:
-            logger.error(f"Failed to execute {provider}: {str(e)}")
+            log_provider(provider, f"Execution error: {str(e)}")
             results['metrics'].add_error(str(e))
             return provider, results, e
 
     async def run_comparison(self, tests: Dict[int, Callable], providers: List[str], measurement_runs: int, target_region: str) -> Dict[str, Any]:
         overall_results = {}
-        logger.info("Starting comparison run...")
-
-        # Handle tests that should only run once
-        single_run_tests = {test_id: func for test_id, func in tests.items() 
-                           if hasattr(func, 'single_run') and func.single_run}
+        log_benchmark("Starting comparison run...")
         
+        # Special handling for Daytona provider
+        # Run Daytona tests sequentially before others to avoid thread contention issues
+        has_daytona = 'daytona' in providers
+        daytona_test_results = {}
+        non_daytona_providers = [p for p in providers if p != 'daytona']
+
+        # Determine which tests should run only once based on their configuration
+        single_run_tests = {}
+        for test_id, test_func in tests.items():
+            # Check for both new configuration format and old attribute-based format
+            try:
+                test_data = test_func()
+                if isinstance(test_data, dict) and 'config' in test_data:
+                    if test_data['config'].get('single_run', False):
+                        single_run_tests[test_id] = test_func
+                        log_benchmark(f"Test {test_id} will run only once (from config)")
+                elif hasattr(test_func, 'single_run') and test_func.single_run:
+                    # Legacy attribute-based configuration
+                    single_run_tests[test_id] = test_func
+                    log_benchmark(f"Test {test_id} will run only once (from attribute)")
+            except Exception as e:
+                log_benchmark(f"Error checking test configuration for test {test_id}: {e}")
+        
+        # Define multi-run tests as all tests not in single_run_tests
         multi_run_tests = {test_id: func for test_id, func in tests.items()
                           if test_id not in single_run_tests}
         
         if single_run_tests:
             test_names = ", ".join([f"{test_id}:{func.__name__}" for test_id, func in single_run_tests.items()])
-            logger.info(f"The following tests will only run once (ignoring measurement_runs): {test_names}")
+            log_benchmark(f"The following tests will only run once (ignoring measurement_runs): {test_names}")
 
         # Run warmups fully in parallel across both providers and tests
         if self.warmup_runs > 0:
-            logger.info(f"Performing {self.warmup_runs} warmup runs in parallel...")
+            log_benchmark(f"Performing {self.warmup_runs} warmup runs in parallel...")
             
-            # Create a shared thread pool executor for all warmup runs
-            with ThreadPoolExecutor(max_workers=self.num_concurrent_providers * len(providers)) as executor:
+            # Create dedicated thread pools for providers that need them during warmup
+            has_daytona = 'daytona' in providers
+            if has_daytona:
+                self.provider_executors['daytona'] = ThreadPoolExecutor(max_workers=1)
+                log_benchmark(f"Created dedicated warmup thread pool for Daytona with 1 worker")
+            
+            # Calculate workers for shared warmup executor
+            shared_workers = self.num_concurrent_providers * (len(providers) - (1 if has_daytona else 0))
+            shared_workers = max(1, shared_workers)  # Ensure at least 1 worker
+            
+            # Create a shared thread pool executor for all other providers' warmup runs
+            with ThreadPoolExecutor(max_workers=shared_workers) as shared_executor:
+                log_benchmark(f"Created shared warmup thread pool with {shared_workers} workers")
                 warmup_tasks = []
                 
                 for i in range(self.warmup_runs):
                     # Only do warmup runs for multi-run tests
                     for test_id, test_code_func in multi_run_tests.items():
                         for provider in providers:
+                            # Each provider now manages its own executors internally
                             warmup_task = asyncio.create_task(
-                                self.run_test_on_provider(test_code_func, provider, executor, target_region)
+                                self.run_test_on_provider(test_code_func, provider, shared_executor, target_region)
                             )
                             warmup_tasks.append(warmup_task)
                 
                 # Run all warmup tasks concurrently and ignore results
                 await asyncio.gather(*warmup_tasks, return_exceptions=True)
-                logger.info("Warmup runs completed")
+                log_benchmark("Warmup runs completed")
+                
+            # Clean up warmup executors to start fresh for the main run
+            for provider, executor in self.provider_executors.items():
+                executor.shutdown()
+            self.provider_executors.clear()
 
-        # Global thread pool executor for all test runs
-        with ThreadPoolExecutor(max_workers=self.num_concurrent_providers * len(providers)) as executor:
+        # If we have Daytona in the providers list, run it first sequentially
+        # This prevents thread contention issues that seem to affect Daytona more than other providers
+        if has_daytona:
+            log_benchmark("Running Daytona tests sequentially first to avoid thread contention")
+            with ThreadPoolExecutor(max_workers=1) as daytona_executor:
+                log_benchmark("Created dedicated Daytona executor with 1 worker")
+                
+                # Run Daytona tests sequentially
+                daytona_results = await self._run_single_provider_tests(
+                    'daytona', 
+                    tests, 
+                    single_run_tests,
+                    multi_run_tests,
+                    measurement_runs,
+                    target_region,
+                    daytona_executor
+                )
+                
+                # Process results and add them to overall results
+                for provider, test_id, run_num, result in daytona_results:
+                    test_results = overall_results.setdefault(f"test_{test_id}", {})
+                    run_results = test_results.setdefault(f"run_{run_num}", {})
+                    
+                    if isinstance(result, Exception):
+                        log_provider(provider, f"Test {test_id}, Run {run_num}: Execution failed: {str(result)}")
+                        run_results[provider] = {'metrics': EnhancedTimingMetrics(), 'output': None, 'error': str(result)}
+                    else:
+                        p_name, p_results, error = result
+                        run_results[p_name] = p_results
+                        if error:
+                            run_results[p_name]['error'] = str(error)
+                            
+            log_benchmark("Completed Daytona tests, now running remaining providers")
+            
+            # Only create an executor for non-Daytona providers
+            providers_for_parallel = non_daytona_providers
+        else:
+            # No Daytona, use all providers
+            providers_for_parallel = providers
+            
+        # Skip the shared executor step if no providers remain
+        if not providers_for_parallel:
+            log_benchmark("No remaining providers to execute")
+            return overall_results
+        
+        # Create a shared executor for the remaining providers
+        # Each provider will manage its own executors internally as needed
+        with ThreadPoolExecutor(max_workers=self.num_concurrent_providers * len(providers_for_parallel)) as executor:
+            log_benchmark(f"Created shared executor with {self.num_concurrent_providers * len(providers_for_parallel)} workers")
+            
             all_test_tasks = []
             test_task_map = {}  # Maps tasks to metadata (test_id, provider, run_num)
             
             # Schedule all single-run tests - PROVIDER PARALLEL
             if single_run_tests:
-                logger.info("Scheduling single-run tests...")
+                log_benchmark("Scheduling single-run tests...")
                 for test_id, test_code_func in single_run_tests.items():
-                    logger.info(f"Scheduling test {test_id}: {test_code_func.__name__} (single run)")
+                    log_benchmark(f"Scheduling test {test_id}: {test_code_func.__name__} (single run)")
                     
                     # Create tasks for all providers in parallel for this test
                     provider_tasks = []
-                    for provider in providers:
+                    for provider in providers_for_parallel:
+                        # Each provider now manages its own executors internally
                         task = asyncio.create_task(
                             self.run_test_on_provider(test_code_func, provider, executor, target_region)
                         )
@@ -247,13 +439,14 @@ class SandboxExecutor:
             
             # Schedule all multi-run tests - PROVIDER PARALLEL 
             if multi_run_tests:
-                logger.info(f"Scheduling {measurement_runs} measurement runs for standard tests...")
+                log_benchmark(f"Scheduling {measurement_runs} measurement runs for standard tests...")
                 for run in range(measurement_runs):
                     run_num = run + 1
                     for test_id, test_code_func in multi_run_tests.items():
                         # Create tasks for all providers in parallel for this test and run
                         provider_tasks = []
-                        for provider in providers:
+                        for provider in providers_for_parallel:
+                            # Each provider now manages its own executors internally
                             task = asyncio.create_task(
                                 self.run_test_on_provider(test_code_func, provider, executor, target_region)
                             )
@@ -267,61 +460,66 @@ class SandboxExecutor:
                         
                         all_test_tasks.extend(provider_tasks)
             
-            # Use a semaphore to limit concurrency based on the number of providers
-            # This ensures we don't exceed resource limits while still getting maximum parallelism
-            sem = asyncio.Semaphore(len(providers) * 2)  # Allow 2 tests per provider
+            # Create a semaphore per provider to prevent one provider from blocking another
+            # Each provider gets its own semaphore with a limit of 2 concurrent tasks
+            provider_semaphores = {provider: asyncio.Semaphore(2) for provider in providers_for_parallel}
             
-            # Helper function to run a task with the semaphore
+            # Helper function to run a task with the appropriate semaphore
             async def run_with_semaphore(task):
-                async with sem:
+                meta = test_task_map[task]
+                provider = meta['provider']
+                async with provider_semaphores[provider]:
                     return await task
             
-            # Group tasks by test and run for parallel execution
-            tasks_by_test_run = {}
+            # Instead of grouping by test/run, run all provider tasks fully in parallel
+            # This prevents blocking between different providers
+            all_semaphore_tasks = []
+            
+            # Create a task entry for each provider/test/run combination
             for task in all_test_tasks:
                 meta = test_task_map[task]
                 test_id = meta['test_id']
                 run_num = meta['run_num']
-                key = (test_id, run_num)
-                if key not in tasks_by_test_run:
-                    tasks_by_test_run[key] = []
-                tasks_by_test_run[key].append(task)
+                provider = meta['provider']
+                
+                # Log the tasks being prepared
+                log_benchmark(f"Preparing task for Test {test_id}, Run {run_num}, Provider {provider}")
+                
+                # Add the semaphore-wrapped task to our execution list 
+                all_semaphore_tasks.append(run_with_semaphore(task))
             
-            # Process all tests and runs
-            all_completed_tasks = []
-            for (test_id, run_num), tasks in tasks_by_test_run.items():
-                # For each test and run, execute all provider tasks in parallel
-                logger.info(f"Executing Test {test_id}, Run {run_num} across all providers in parallel")
+            # Execute ALL provider tasks concurrently, not grouped by test/run
+            log_benchmark(f"Executing all tasks across all providers in parallel")
+            all_completed_tasks = await asyncio.gather(*all_semaphore_tasks, return_exceptions=True)
+            
+            # Process results and organize them by test/run/provider
+            for task, result in zip(all_test_tasks, all_completed_tasks):
+                meta = test_task_map[task]
+                test_id = meta['test_id']
+                run_num = meta['run_num']
+                provider = meta['provider']
                 
-                # Wrap tasks with semaphore
-                semaphore_tasks = [run_with_semaphore(task) for task in tasks]
+                # Initialize results structure
+                test_results = overall_results.setdefault(f"test_{test_id}", {})
+                run_results = test_results.setdefault(f"run_{run_num}", {})
                 
-                # Execute all provider tasks for this test and run concurrently
-                provider_results = await asyncio.gather(*semaphore_tasks, return_exceptions=True)
-                
-                # Process results for this batch
-                for task, result in zip(tasks, provider_results):
-                    meta = test_task_map[task]
-                    provider = meta['provider']
-                    
-                    # Initialize results structure
-                    test_results = overall_results.setdefault(f"test_{test_id}", {})
-                    run_results = test_results.setdefault(f"run_{run_num}", {})
-                    
-                    # Process the result
-                    if isinstance(result, Exception):
-                        logger.error(f"Test {test_id}, Run {run_num}: Failed to execute {provider}: {str(result)}")
-                        run_results[provider] = {'metrics': EnhancedTimingMetrics(), 'output': None, 'error': str(result)}
-                    else:
-                        p_name, p_results, error = result
-                        run_results[p_name] = p_results
-                        if error:
-                            run_results[p_name]['error'] = str(error)
-                    
-                # Store completed tasks for return
-                all_completed_tasks.extend(provider_results)
+                # Process the result
+                if isinstance(result, Exception):
+                    log_provider(provider, f"Test {test_id}, Run {run_num}: Execution failed: {str(result)}")
+                    run_results[provider] = {'metrics': EnhancedTimingMetrics(), 'output': None, 'error': str(result)}
+                else:
+                    p_name, p_results, error = result
+                    run_results[p_name] = p_results
+                    if error:
+                        run_results[p_name]['error'] = str(error)
         
-        logger.info("All tests completed")
+        # Clean up any dedicated executors
+        for provider, executor in self.provider_executors.items():
+            log_benchmark(f"Shutting down dedicated executor for {provider}")
+            executor.shutdown()
+        self.provider_executors.clear()
+        
+        log_benchmark("All tests completed")
         return overall_results
 
 
@@ -558,7 +756,7 @@ class ResultsVisualizer:
                 headers = ["Metric"] + [p.capitalize() for p in providers]
                 table_data = []
                 
-                for metric in ["Workspace Creation", "Code Execution", "Cleanup"]:
+                for metric in ["Workspace Creation", "Code Execution", "Internal Execution", "Cleanup"]:
                     row = [metric]
                     for provider in providers:
                         all_runs_metrics = []
@@ -639,7 +837,7 @@ async def main(args):
     
     # Validate that we have providers to run
     if not providers_to_run:
-        logger.error("No providers specified to run tests on.")
+        log_benchmark("No providers specified to run tests on.")
         return
     
     executor_obj = SandboxExecutor(
@@ -648,7 +846,7 @@ async def main(args):
         num_concurrent_providers=num_concurrent
     )
     
-    logger.info(f"Running with {num_concurrent} provider(s) in parallel")
+    log_benchmark(f"Running with {num_concurrent} provider(s) in parallel")
 
     tests_to_run = {}
     if args.tests == "all":
@@ -658,11 +856,11 @@ async def main(args):
             if test_id in defined_tests:
                 tests_to_run[test_id] = defined_tests[test_id]
             else:
-                logger.warning(f"Test ID {test_id} not found and will be skipped.")
+                log_benchmark(f"Test ID {test_id} not found and will be skipped.")
                 
     # Validate that we have tests to run
     if not tests_to_run:
-        logger.error("No valid tests specified to run.")
+        log_benchmark("No valid tests specified to run.")
         return
 
     try:
@@ -679,7 +877,7 @@ async def main(args):
         )
         total_time = time.time() - start_time
         
-        logger.info(f"All benchmark tests completed in {total_time:.2f} seconds")
+        log_benchmark(f"All benchmark tests completed in {total_time:.2f} seconds")
         
         # Add results to history with metadata
         run_metadata = {
@@ -695,7 +893,7 @@ async def main(args):
             tests=tests_to_run,
             metadata=run_metadata
         )
-        logger.info(f"Benchmark results saved to history file: {history.history_file}")
+        log_benchmark(f"Benchmark results saved to history file: {history.history_file}")
         
         # Display benchmark results
         visualizer = ResultsVisualizer()
@@ -717,7 +915,7 @@ async def main(args):
             )
             
     except Exception as e:
-        logger.error(f"Error during execution: {str(e)}")
+        log_benchmark(f"Error during execution: {str(e)}")
         raise
 
 
@@ -727,8 +925,8 @@ if __name__ == "__main__":
                         help='Comma-separated list of test IDs to run (or "all" for all tests). Default: all')
     parser.add_argument('-a', '--all-tests', action='store_true',
                         help='Toggle between selecting all tests and no tests')
-    parser.add_argument('--providers', '-p', type=str, default='daytona,e2b,codesandbox,modal',
-                        help='Comma-separated list of providers to test. Default: daytona,e2b,codesandbox,modal')
+    parser.add_argument('--providers', '-p', type=str, default='daytona,e2b,codesandbox,modal,local',
+                        help='Comma-separated list of providers to test. Default: daytona,e2b,codesandbox,modal,local')
     parser.add_argument('-A', '--all-providers', action='store_true',
                         help='Toggle between selecting all providers and no providers')
     parser.add_argument('--runs', '-r', type=int, default=10,
@@ -757,7 +955,7 @@ if __name__ == "__main__":
     # Handle all-providers toggle
     if args.all_providers:
         # Toggle between all and none
-        all_providers = "daytona,e2b,codesandbox,modal"
+        all_providers = "daytona,e2b,codesandbox,modal,local"
         if args.providers == all_providers:
             args.providers = ""
         else:

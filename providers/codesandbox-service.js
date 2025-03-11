@@ -52,7 +52,7 @@ app.post('/execute', async (req, res) => {
     const requestId = Math.random().toString(36).substring(7);
     log(`[${requestId}] Starting code execution request`);
 
-    const { code, env_vars } = req.body;
+    const { code, env_vars, test_config } = req.body;
     if (!code) {
         log(`[${requestId}] No code provided in request`, 'error');
         return res.status(400).json({ error: 'No code provided' });
@@ -62,6 +62,13 @@ app.post('/execute', async (req, res) => {
     
     if (env_vars) {
         log(`[${requestId}] Environment variables provided: ${Object.keys(env_vars).join(', ')}`);
+    }
+    
+    if (test_config) {
+        log(`[${requestId}] Test configuration provided: ${JSON.stringify(test_config)}`);
+        if (test_config.packages) {
+            log(`[${requestId}] Required packages from test config: ${test_config.packages.join(', ')}`);
+        }
     }
 
     const startTime = Date.now();
@@ -187,11 +194,20 @@ def check_and_install_dependencies(
     # Import again after creating the file
     from providers.utils import check_and_install_dependencies
 
-# Define common packages needed for tests
+# Get packages to install from test config if available
+always_install_packages = []
+
+${test_config && test_config.packages ? `
+# Use packages from test configuration
+always_install_packages = ${JSON.stringify(test_config.packages)}
+log("Using packages from test config: " + str(always_install_packages))
+` : `
+# Default packages to install
 always_install_packages = [
     'numpy',  # Required for FFT tests
     'scipy',  # Required for FFT tests
 ]
+`}
 
 # The code string is passed in with triple quotes to handle any internal quotes
 installed_packages = check_and_install_dependencies(
@@ -203,6 +219,16 @@ print(f"Installed packages: {installed_packages}")
 
         const dependencyResult = await sandbox.shells.python.run(dependencyCheckerCode);
         log(`[${requestId}] Dependency check output: ${dependencyResult.output}`);
+        
+        // For FFT performance test, ensure packages are properly installed
+        if (code.includes("from scipy import fft")) {
+            log(`[${requestId}] FFT test detected, installing packages directly...`);
+            const pipInstallCode = `
+pip install --user numpy scipy
+`;
+            const pipResult = await sandbox.shells.python.run(pipInstallCode);
+            log(`[${requestId}] Package installation output: ${pipResult.output}`);
+        }
         
         const execStart = Date.now();
         log(`[${requestId}] Executing code in sandbox`);

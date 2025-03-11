@@ -1,18 +1,15 @@
 """
-Test that calculates prime numbers to benchmark basic computation performance.
-
-This test measures the performance of a simple algorithm to find prime numbers,
-which is CPU-bound and doesn't require any external dependencies.
+Improved version of the calculate primes test using the test_utils module.
 """
 from tests.test_utils import create_test_config
 from tests.test_sandbox_utils import get_sandbox_utils
 
-def test_calculate_primes():
+def test_improved_calculate_primes():
     """
     Test that calculates prime numbers to benchmark basic computation performance.
 
-    This test finds the first 10 prime numbers and calculates their sum and average.
-    It's a simple CPU-bound test that doesn't require any external dependencies.
+    This test measures the performance of a simple algorithm to find prime numbers,
+    which is CPU-bound and doesn't require any external dependencies.
     """
     # Define test configuration
     config = create_test_config(
@@ -30,10 +27,10 @@ def test_calculate_primes():
     # Define the test-specific code
     test_code = """
 @benchmark_timer
-def calculate_primes():
+def calculate_primes(limit=1000):
+    # Calculate prime numbers up to the specified limit
     primes = []
-    num = 2
-    while len(primes) < 10:
+    for num in range(2, limit + 1):
         is_prime = True
         for i in range(2, int(num**0.5) + 1):
             if num % i == 0:
@@ -41,10 +38,13 @@ def calculate_primes():
                 break
         if is_prime:
             primes.append(num)
-        num += 1
+
+    # Calculate some statistics
+    prime_count = len(primes)
     prime_sum = sum(primes)
-    prime_avg = prime_sum / len(primes)
-    return f"Primes: {primes}\\nSum: {prime_sum}\\nAverage: {prime_avg}"
+    prime_avg = prime_sum / prime_count if prime_count > 0 else 0
+
+    return f"Found {prime_count} primes up to {limit}\\nSum: {prime_sum}\\nAverage: {prime_avg:.2f}"
 
 # Execute the test and get results with timing
 test_result = calculate_primes()

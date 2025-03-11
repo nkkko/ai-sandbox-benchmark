@@ -1,0 +1,59 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Benchmark Test Standards
+
+Rules for consistent test implementation in the AI Sandbox Benchmark project
+
+```rule
+id: test-naming-convention
+name: Test Function Naming Convention
+description: All test functions should be named 'test_<category>_<specific_test>' for consistency
+pattern: def test_[a-z]+_[a-z_]+\(
+severity: warning
+```
+
+```rule
+id: test-docstring-required
+name: Test Docstring Required
+description: All test functions should have a detailed docstring explaining purpose, inputs, and expected outputs
+pattern: def test_.*:\s+"""
+severity: warning
+```
+
+```rule
+id: test-return-metrics
+name: Test Return Metrics
+description: Test functions should return code to execute and expected outputs for validation
+pattern: return\s+["'].+["'],\s+[{\[]
+severity: warning
+```
+
+```rule
+id: provider-compatibility-tag
+name: Provider Compatibility
+description: Tests should specify which providers they are compatible with using a PROVIDERS_COMPATIBILITY list
+pattern: PROVIDERS_COMPATIBILITY\s*=\s*\[
+severity: info
+```
+
+```rule
+id: test-complexity-indication
+name: Test Complexity Indication
+description: Tests should indicate their complexity level (COMPLEXITY = 'simple'|'medium'|'complex')
+pattern: COMPLEXITY\s*=\s*["'](mdc:?:simple|medium|complex)["']
+severity: info
+```
+
+```rule
+id: test-timeout-specification
+name: Test Timeout Specification
+description: Tests should specify their expected maximum runtime in seconds
+pattern: TIMEOUT_SECONDS\s*=\s*\d+
+severity: info
+```
+
+file_patterns: ["tests/*.py"]
+exclusions: ["tests/__init__.py"]

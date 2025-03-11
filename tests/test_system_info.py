@@ -1,3 +1,12 @@
+"""
+Test that gathers and reports essential system information about the sandbox environment.
+
+This test collects detailed information about the operating system, CPU, memory,
+disk space, and environment variables to help evaluate the sandbox environment.
+"""
+from tests.test_utils import create_test_config
+from tests.test_sandbox_utils import get_sandbox_utils
+
 def test_system_info():
     """
     Gather and report essential system information about the sandbox environment.
@@ -10,9 +19,22 @@ def test_system_info():
     - Disk space information
     - Environment variables
     """
-    # Mark this test as an info test (not performance focused)
-    test_system_info.is_info_test = True
-    return """
+    # Define test configuration
+    config = create_test_config(
+        env_vars=[],  # No env vars needed
+        single_run=True,  # Only need to run once per benchmark session
+        is_info_test=True  # This is an information test, not a performance test
+    )
+    
+    # Get the sandbox utilities code
+    utils_code = get_sandbox_utils(
+        include_timer=False,  # No need for timing in an info test
+        include_results=False,  # No need for standard result formatting
+        include_packages=True  # We'll try to install psutil if needed
+    )
+    
+    # Define the test-specific code
+    test_code = """
 import os
 import sys
 import platform
@@ -535,4 +557,18 @@ if not HAS_PSUTIL:
     print("NOTE: For more complete system information, install psutil package")
 
 print("=================================================================\\n")
+
+# Record timing information for benchmark (not needed for info tests)
+print("\\n\\n--- BENCHMARK TIMING DATA ---")
+print(json.dumps({"internal_execution_time_ms": 0.0}))  # System info tests don't need timing
+print("--- END BENCHMARK TIMING DATA ---")
 """
+
+    # Combine the utilities and test code
+    full_code = f"{utils_code}\n\n{test_code}"
+
+    # Return the test configuration and code
+    return {
+        "config": config,
+        "code": full_code
+    }

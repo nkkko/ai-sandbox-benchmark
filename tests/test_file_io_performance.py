@@ -1,7 +1,38 @@
+"""
+Test that measures file I/O performance by reading and writing various file types.
+
+This test evaluates the sandbox environment's file system performance by measuring
+read and write speeds for binary, JSON, and CSV files of different sizes.
+"""
+from tests.test_utils import create_test_config
+from tests.test_sandbox_utils import get_sandbox_utils
+
 def test_file_io_performance():
-    # This test should only run once per provider
-    test_file_io_performance.single_run = True
-    return """import os
+    """
+    Measures file I/O performance by reading and writing various file types.
+    
+    This test evaluates:
+    - Binary file read/write performance for different file sizes
+    - JSON file read/write performance with different record counts
+    - CSV file read/write performance with different record counts
+    - Concurrent file operations performance
+    """
+    # Define test configuration
+    config = create_test_config(
+        env_vars=[],  # No env vars needed
+        single_run=True,  # Only need to run once per benchmark session
+    )
+    
+    # Get the sandbox utilities code
+    utils_code = get_sandbox_utils(
+        include_timer=False,  # We'll handle timing manually in this test
+        include_results=False,  # We'll format results manually
+        include_packages=False  # No external packages needed
+    )
+    
+    # Define the test-specific code
+    test_code = """
+import os
 import time
 import json
 import csv
@@ -257,5 +288,26 @@ def run_file_io_tests():
     return results
 
 # Run the file I/O tests
-run_file_io_tests()
+results = run_file_io_tests()
+
+# Record timing information for benchmark
+# Use the average of binary file read/write times for the medium size (10MB)
+binary_write_time = results['binary']['write'].get(10, 0) * 1000  # Convert to ms
+binary_read_time = results['binary']['read'].get(10, 0) * 1000    # Convert to ms
+avg_binary_time = (binary_write_time + binary_read_time) / 2
+
+print("\\n\\n--- BENCHMARK TIMING DATA ---")
+print(json.dumps({
+    "internal_execution_time_ms": avg_binary_time
+}))
+print("--- END BENCHMARK TIMING DATA ---")
 """
+
+    # Combine the utilities and test code
+    full_code = f"{utils_code}\n\n{test_code}"
+
+    # Return the test configuration and code
+    return {
+        "config": config,
+        "code": full_code
+    }

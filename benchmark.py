@@ -113,7 +113,7 @@ class BenchmarkTUI:
         self.region = "eu"
 
         # Available providers and tests
-        self.providers = ["daytona", "e2b", "codesandbox", "modal"]
+        self.providers = ["daytona", "e2b", "codesandbox", "modal", "local"]
         self.selected_providers = ["daytona"]  # Select all by default
         self.selected_tests = [1]  # Start with just the first test selected
 
@@ -1022,7 +1022,7 @@ def parse_args():
                       help='Run in command-line mode instead of TUI')
     parser.add_argument('--tests', '-t', type=str, default='all',
                       help='Comma-separated list of test IDs to run (or "all" for all tests)')
-    parser.add_argument('--providers', '-p', type=str, default='daytona,e2b,codesandbox,modal',
+    parser.add_argument('--providers', '-p', type=str, default='daytona,e2b,codesandbox,modal,local',
                       help='Comma-separated list of providers to test')
     parser.add_argument('--runs', '-r', type=int, default=1,
                       help='Number of measurement runs per test/provider')
