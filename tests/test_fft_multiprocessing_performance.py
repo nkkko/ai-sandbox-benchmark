@@ -6,7 +6,7 @@ def test_fft_multiprocessing_performance():
         "single_run": False,  # Can run multiple times
         "packages": ["numpy", "scipy", "psutil"]  # Required packages
     }
-    
+
     code = """
 import sys
 import json
@@ -25,17 +25,17 @@ except ImportError:
     print("Installing required packages...")
     import subprocess
     subprocess.check_call([sys.executable, "-m", "pip", "install", "numpy", "scipy", "psutil"])
-    
+
     # Force a refresh of the sys.path to find newly installed packages
     import site
     from importlib import invalidate_caches
     invalidate_caches()
-    
+
     # Add site-packages to system path if needed
     site_packages = site.getsitepackages()[0]
     if site_packages not in sys.path:
         sys.path.insert(0, site_packages)
-    
+
     # Now import the packages
     import numpy as np
     from scipy import fft
@@ -54,17 +54,8 @@ print(f"Total memory: {total_memory_gb:.2f} GB")
 print(f"Available memory: {available_memory_gb:.2f} GB")
 print("=========================")
 
-# Define constants
-# Adjust matrix size based on available memory - smaller for lower memory systems
-if available_memory_gb < 2:
-    MATRIX_SIZE = 1000  # Very small for limited memory
-elif available_memory_gb < 4:
-    MATRIX_SIZE = 1500  # Small for limited memory
-elif available_memory_gb < 8:
-    MATRIX_SIZE = 2000  # Medium size
-else:
-    MATRIX_SIZE = 3000  # Larger for systems with plenty of memory
 
+MATRIX_SIZE = 10000  # Larger for systems with plenty of memory
 MAX_RUNTIME = 180  # 3 minutes max runtime to avoid timeouts
 NUM_ITERATIONS = 3  # Number of FFT calculations to perform sequentially
 
@@ -117,7 +108,7 @@ def run_fft_benchmark_sequential():
         matrix = np.random.random((MATRIX_SIZE, MATRIX_SIZE))
         result = fft.fft2(matrix)
         results.append(f"Sequential FFT #{i+1} completed")
-    
+
     return f"Completed {NUM_ITERATIONS} sequential FFT calculations"
 
 @benchmark_timer
@@ -135,17 +126,17 @@ def run_fft_benchmark_parallel():
     try:
         # Prepare data - we'll do NUM_ITERATIONS FFT calculations in parallel
         tasks = [(MATRIX_SIZE, i) for i in range(NUM_ITERATIONS)]
-        
+
         # Create pool with appropriate start method
         if sys.platform == 'darwin':  # macOS
             ctx = multiprocessing.get_context('fork')
         else:
             ctx = multiprocessing.get_context()
-            
+
         with ctx.Pool(processes=num_processes) as pool:
             # Execute FFT calculations in parallel
             results = pool.map(fft_worker, tasks)
-            
+
         return f"Completed {NUM_ITERATIONS} parallel FFT calculations on {num_processes} cores"
     except Exception as e:
         print(f"Error in parallel execution: {str(e)}")
@@ -169,7 +160,7 @@ if "Skipped" not in parallel_result['result'] and "Error" not in parallel_result
 
 # Calculate speedup if both benchmarks completed successfully
 valid_results = (
-    "Skipped" not in sequential_result['result'] and 
+    "Skipped" not in sequential_result['result'] and
     "Skipped" not in parallel_result['result'] and
     "Error" not in sequential_result['result'] and
     "Error" not in parallel_result['result']
