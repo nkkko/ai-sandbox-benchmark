@@ -23,7 +23,7 @@ TESTS_DIR = 'tests'
 defined_tests = {}
 test_id = 1
 for filename in os.listdir(TESTS_DIR):
-    if filename.endswith('.py') and not filename.startswith('__'):
+    if filename.endswith('.py') and not filename.startswith('__') and filename != 'test_template.py':
         module_name = filename[:-3]
         module = importlib.import_module(f'{TESTS_DIR}.{module_name}')
         for name, func in inspect.getmembers(module, inspect.isfunction):

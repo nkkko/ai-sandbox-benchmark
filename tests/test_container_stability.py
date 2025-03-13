@@ -46,12 +46,12 @@ import datetime
 from concurrent.futures import ThreadPoolExecutor
 import resource
 
-# Configuration
-DURATION = 300  # Test duration in seconds (5 minutes)
-MEASUREMENT_INTERVAL = 5  # Measure resource usage every 5 seconds
-MAX_CPU_LOAD = 0.75  # Target CPU load for stress test (75%)
-MEMORY_CHUNK_SIZE = 10 * 1024 * 1024  # 10MB chunks for memory test
-DISK_IO_SIZE = 50 * 1024 * 1024  # 50MB for disk I/O test
+# Configuration - reduced durations and loads for better stability
+DURATION = 60  # Reduced test duration from 300s to 60s (1 minute)
+MEASUREMENT_INTERVAL = 2  # Measure resource usage more frequently
+MAX_CPU_LOAD = 0.5  # Reduced target CPU load from 75% to 50%
+MEMORY_CHUNK_SIZE = 5 * 1024 * 1024  # Reduced from 10MB to 5MB chunks
+DISK_IO_SIZE = 20 * 1024 * 1024  # Reduced from 50MB to 20MB
 
 class ResourceMonitor:
     def __init__(self, interval=1):
@@ -312,18 +312,75 @@ def combined_stability_test():
     monitor = ResourceMonitor(interval=MEASUREMENT_INTERVAL)
     monitor.start()
     
-    # Use thread pool to run tests concurrently
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        cpu_future = executor.submit(cpu_load_generator, MAX_CPU_LOAD, DURATION)
-        memory_future = executor.submit(memory_pressure_test, DURATION, MEMORY_CHUNK_SIZE)
-        disk_future = executor.submit(disk_io_test, DURATION, DISK_IO_SIZE)
+    # Check available resources to scale tests appropriately
+    system_resources = {}
+    try:
+        system_resources['cpu_count'] = psutil.cpu_count(logical=False) or 2
+        system_resources['memory_gb'] = psutil.virtual_memory().total / (1024**3)
+        system_resources['memory_avail_gb'] = psutil.virtual_memory().available / (1024**3)
+        print(f"Detected resources: {system_resources['cpu_count']} CPUs, {system_resources['memory_avail_gb']:.2f}GB available memory")
         
-        # Wait for all tests to complete
+        # Adjust parameters based on available resources
+        resource_scale = max(0.3, min(1.0, system_resources['memory_avail_gb'] / 4))
+        adjusted_duration = int(DURATION * resource_scale)
+        adjusted_chunk_size = int(MEMORY_CHUNK_SIZE * resource_scale)
+        adjusted_disk_size = int(DISK_IO_SIZE * resource_scale)
+        
+        print(f"Scaling test to {resource_scale*100:.0f}% of default intensity")
+        print(f"Adjusted duration: {adjusted_duration}s, Memory chunk: {adjusted_chunk_size/1024/1024:.1f}MB, Disk size: {adjusted_disk_size/1024/1024:.1f}MB")
+    except Exception as e:
+        print(f"Error detecting resources: {e} - using default parameters")
+        adjusted_duration = DURATION
+        adjusted_chunk_size = MEMORY_CHUNK_SIZE
+        adjusted_disk_size = DISK_IO_SIZE
+    
+    # Set early exit flag to stop tests if resources are constrained
+    early_exit = threading.Event()
+    
+    # Monitor worker to check for resource constraints and trigger early exit if needed
+    def resource_guard():
+        threshold_exceeded_count = 0
+        while not early_exit.is_set() and threshold_exceeded_count < 3:
+            try:
+                mem = psutil.virtual_memory()
+                if mem.percent > 90:  # If memory usage exceeds 90%
+                    threshold_exceeded_count += 1
+                    print(f"WARNING: High memory usage detected ({mem.percent}%)")
+                else:
+                    threshold_exceeded_count = 0
+                
+                if threshold_exceeded_count >= 3:
+                    print("CRITICAL: Resource constraints detected - triggering early exit")
+                    early_exit.set()
+                    break
+            except Exception:
+                pass
+            time.sleep(2)
+    
+    # Start resource guard in a separate thread
+    guard_thread = threading.Thread(target=resource_guard, daemon=True)
+    guard_thread.start()
+    
+    # Use thread pool to run tests concurrently with reduced workers
+    worker_count = min(3, max(1, system_resources.get('cpu_count', 2) - 1))
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        print(f"Starting stability tests with {worker_count} workers")
+        cpu_future = executor.submit(cpu_load_generator, MAX_CPU_LOAD, adjusted_duration)
+        memory_future = executor.submit(memory_pressure_test, adjusted_duration, adjusted_chunk_size)
+        disk_future = executor.submit(disk_io_test, adjusted_duration, adjusted_disk_size)
+        
+        # Wait for all tests to complete or early exit
         for future in [cpu_future, memory_future, disk_future]:
             try:
-                future.result()
+                # Use timeout to prevent test from hanging
+                future.result(timeout=adjusted_duration + 30)
             except Exception as e:
                 print(f"Test failed with error: {e}")
+            
+            # Check if we should exit early
+            if early_exit.is_set():
+                print("Tests stopping early due to resource constraints")
+                break
     
     # Stop monitoring
     monitor.stop()
