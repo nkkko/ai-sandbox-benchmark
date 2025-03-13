@@ -125,7 +125,7 @@ def ensure_packages(packages, verbose=True, max_retries=3):
 # Template for resource detection
 RESOURCE_DETECTION_TEMPLATE = """
 def detect_resource_constraints():
-    """Detects available system resources and returns constraint information."""
+    '''Detects available system resources and returns constraint information.'''
     try:
         import psutil
         import multiprocessing
