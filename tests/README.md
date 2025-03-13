@@ -20,7 +20,7 @@ Contains utilities for test creation and configuration:
 - `ensure_packages`: Function to install required packages
 - `print_benchmark_results`: Function to print benchmark results in a standardized format
 - `create_test_config`: Function to create a standardized test configuration
-- `test_wrapper`: Decorator for wrapping test functions with standard configuration
+- `wrap_test`: Decorator for wrapping test functions with standard configuration
 
 ### `test_sandbox_utils.py`
 
