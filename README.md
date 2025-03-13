@@ -109,6 +109,7 @@ ai-sandbox-benchmark
    DAYTONA_API_KEY=your_daytona_api_key
    DAYTONA_SERVER_URL=your_daytona_server_url
    CSB_API_KEY=your_codesandbox_api_key
+   E2B_API_KEY=your_e2b_api_key
    ```
 
 6. **Configure Sandbox Settings (Optional)**
