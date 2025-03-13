@@ -128,7 +128,8 @@ def create_test_config(
 
     return config
 
-def test_wrapper(
+# Note: Not a test - this is a utility function
+def wrap_test(
     test_func: Callable,
     config: Dict[str, Any] = None,
     is_info_test: bool = False
