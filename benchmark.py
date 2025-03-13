@@ -191,7 +191,11 @@ class BenchmarkTUI:
             test_func = defined_tests.get(test_id)
             if test_func:
                 is_single_run = hasattr(test_func, 'single_run') and test_func.single_run
+                # Clean up the test function name to remove any wrapper prefix
                 test_name = test_func.__name__
+                if "test_wrapper" in test_name:
+                    # If the name contains "test_wrapper", just use the actual function name
+                    test_name = test_name.split(".")[-1]
                 if is_single_run:
                     test_name += " (single)"
                 selected_test_names.append(f"{test_id}:{test_name}")
@@ -332,7 +336,12 @@ class BenchmarkTUI:
             if test_id in self.selected_tests:
                 attr |= curses.A_BOLD
 
-            test_name = f"{test_id}. {status} {test_func.__name__}{single_run_info}"
+            # Clean up the test function name to remove any wrapper prefix
+            func_name = test_func.__name__
+            if "test_wrapper" in func_name:
+                # If the name contains "test_wrapper", just use the actual function name
+                func_name = func_name.split(".")[-1]
+            test_name = f"{test_id}. {status} {func_name}{single_run_info}"
             max_width = self.width - 10
             if len(test_name) > max_width:
                 test_name = test_name[:max_width-3] + "..."

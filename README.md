@@ -12,6 +12,7 @@ We invite developers, testers, and enthusiasts to contribute by adding new tests
 - **Add New Tests:** Extend the test suite with new scenarios to evaluate sandbox performance.
 - **Integrate Providers:** Connect additional sandbox environments to broaden the comparison scope.
 - **Improve Documentation:** Help enhance the clarity and usability of the project guides.
+- **Optimize Existing Tests:** Improve performance of current tests, like the improved prime calculation test.
 
 Check out the [Contributing Guidelines](#contributing) below to get started!
 
@@ -23,6 +24,8 @@ ai-sandbox-benchmark
 ├── metrics.py
 ├── comparator.py
 ├── benchmark.py     # Terminal UI for benchmarking
+├── migrate_tests.py # Test migration utility
+├── test_rule.py
 ├── requirements.txt
 ├── providers
 │   ├── daytona.py
@@ -30,13 +33,30 @@ ai-sandbox-benchmark
 │   ├── __init__.py
 │   ├── e2b.py
 │   ├── modal.py
+│   ├── local.py     # Local execution provider
+│   ├── utils.py     # Provider utilities
 │   └── codesandbox-service.js
 ├── tests
+│   ├── MIGRATION_GUIDE.md
+│   ├── README.md
+│   ├── __init__.py
 │   ├── test_list_directory.py
 │   ├── test_calculate_primes.py
-│   ├── __init__.py
 │   ├── test_llm_generated_primes.py
-│   └── test_resource_intensive_calculation.py
+│   ├── test_resource_intensive_calculation.py
+│   ├── test_container_stability.py
+│   ├── test_database_operations.py
+│   ├── test_fft_multiprocessing_performance.py
+│   ├── test_fft_performance.py
+│   ├── test_file_io_performance.py
+│   ├── test_improved_calculate_primes.py
+│   ├── test_optimized_example.py
+│   ├── test_package_installation.py
+│   ├── test_sandbox_utils.py
+│   ├── test_startup_time.py
+│   ├── test_system_info.py
+│   ├── test_template.py
+│   └── test_utils.py
 └── README.md
 ```
 
@@ -101,12 +121,12 @@ ai-sandbox-benchmark
      pass_to_sandbox:
        - OPENAI_API_KEY
        # Add other variables as needed
-   
+
    # Test configuration
    tests:
      warmup_runs: 1
      measurement_runs: 10
-   
+
    # Provider-specific settings
    providers:
      daytona:
@@ -128,16 +148,21 @@ node providers/codesandbox-service.js
 The benchmark includes the following tests:
 
 1. **Calculate Primes** - Calculates the first 10 prime numbers, their sum and average
-2. **Resource Intensive Calculation** - Runs CPU, memory, and disk-intensive tasks to stress test the environment
-3. **Package Installation** - Measures installation and import time for simple and complex Python packages
-4. **File I/O Performance** - Benchmarks file operations with different file sizes and formats
-5. **Startup Time** - Measures Python interpreter and library startup times
-6. **LLM Generated Primes** - Generates code using an LLM to calculate prime numbers
-7. **Database Operations** - Tests SQLite database performance for various operations
-8. **Container Stability** - Measures stability under combined CPU, memory, and disk load
-9. **List Directory** - Basic system command execution test using ls command
-10. **System Info** - Gathers detailed system information about the environment
-11. **FFT Performance** - Benchmarks Fast Fourier Transform computation speed
+2. **Improved Calculate Primes** - Optimized version of the prime calculation test
+3. **Resource Intensive Calculation** - Runs CPU, memory, and disk-intensive tasks to stress test the environment
+4. **Package Installation** - Measures installation and import time for simple and complex Python packages
+5. **File I/O Performance** - Benchmarks file operations with different file sizes and formats
+6. **Startup Time** - Measures Python interpreter and library startup times
+7. **LLM Generated Primes** - Generates code using an LLM to calculate prime numbers
+8. **Database Operations** - Tests SQLite database performance for various operations
+9. **Container Stability** - Measures stability under combined CPU, memory, and disk load
+10. **List Directory** - Basic system command execution test using ls command
+11. **System Info** - Gathers detailed system information about the environment
+12. **FFT Performance** - Benchmarks Fast Fourier Transform computation speed
+13. **FFT Multiprocessing Performance** - Tests FFT computation with parallel processing
+14. **Optimized Example** - Demonstrates optimized code execution patterns
+15. **Sandbox Utils** - Tests utility functions specific to sandbox environments
+16. **Template** - Template for creating new tests
 
 ### Run Benchmarks
 
@@ -177,7 +202,7 @@ python benchmark.py --cli
   **Default:** `all`
 
 - `--providers` or `-p`: Comma-separated list of providers to test.
-  **Default:** `daytona,e2b,codesandbox,modal`
+  **Default:** `daytona,e2b,codesandbox,modal,local`
 
 - `--runs` or `-r`: Number of measurement runs per test/provider.
   **Default:** `10`
@@ -187,13 +212,13 @@ python benchmark.py --cli
 
 - `--target-region`: Target region (e.g., `eu`, `us`, `asia`).
   **Default:** `eu`
-  
+
 - `--show-history`: Show historical performance comparison.
   **Default:** Disabled (flag to enable)
-  
+
 - `--history-limit`: Number of previous runs to include in history.
   **Default:** `5`
-  
+
 - `--history-file`: Path to the benchmark history file.
   **Default:** `benchmark_history.json`
 
@@ -211,12 +236,18 @@ python benchmark.py --cli
   python comparator.py --tests 1,3 --providers daytona,codesandbox
   ```
 
+- **Run Tests on Local Machine Only**
+
+  ```bash
+  python comparator.py --providers local
+  ```
+
 - **Increase Measurement and Warmup Runs**
 
   ```bash
   python comparator.py --runs 20 --warmup-runs 2
   ```
-  
+
 - **View Historical Performance Trends**
 
   ```bash
@@ -352,6 +383,7 @@ This project is licensed under the [Apache 2.0 License](LICENSE).
   - [e2b Code Interpreter](https://e2b.io/)
   - [CodeSandbox SDK](https://codesandbox.io/)
   - [Modal](https://modal.com/)
+  - Local Provider (runs tests on the local machine)
 
 - **Libraries and Tools:**
   - [LangChain](https://langchain.com/)
