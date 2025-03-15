@@ -54,6 +54,7 @@ python benchmark.py
 - **Comprehensive Metrics**: Detailed timing for workspace creation, execution, and cleanup
 - **Statistical Analysis**: Mean, standard deviation, and relative performance comparisons
 - **Warmup Runs**: Configurable warmup runs to ensure stable measurements
+- **Daytona Warm Pools**: Support for Daytona's warm sandbox pools for faster startup times
 
 ## ⚡ Performance Comparison Example
 

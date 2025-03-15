@@ -361,12 +361,20 @@ class SandboxExecutor:
                 executor.shutdown()
             self.provider_executors.clear()
 
-        # If we have Daytona in the providers list, run it first sequentially
+        # If we have Daytona in the providers list, warm up the pool and run it first sequentially
         # This prevents thread contention issues that seem to affect Daytona more than other providers
         if has_daytona:
             log_benchmark("Running Daytona tests sequentially first to avoid thread contention")
             with ThreadPoolExecutor(max_workers=1) as daytona_executor:
                 log_benchmark("Created dedicated Daytona executor with 1 worker")
+                
+                # Warm up Daytona's pool before running tests
+                log_benchmark("Warming up Daytona pool for better performance")
+                try:
+                    await daytona.list_workspaces(target_region)
+                    log_benchmark("Daytona warm pool activated")
+                except Exception as e:
+                    log_benchmark(f"Daytona warm pool initialization failed: {str(e)}")
                 
                 # Run Daytona tests sequentially
                 daytona_results = await self._run_single_provider_tests(

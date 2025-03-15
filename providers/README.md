@@ -37,6 +37,14 @@ Daytona requires API credentials to access their cloud-based execution environme
    DAYTONA_SERVER_URL=your_daytona_server_url
    ```
 
+#### Warm Pools Feature
+
+The Daytona implementation includes support for their warm sandbox pools, which significantly improves workspace creation time:
+
+- Automatically pings Daytona's API before creating workspaces to activate warm pools
+- Measures and tracks warmup time in performance metrics
+- Use `daytona.list_workspaces(target_region)` to manually activate warm pools
+
 ### e2b
 
 e2b requires an API key for their code execution environment:

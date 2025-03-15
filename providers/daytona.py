@@ -12,6 +12,9 @@ from daytona_sdk import Daytona, DaytonaConfig, CreateWorkspaceParams
 from metrics import BenchmarkTimingMetrics
 from providers.utils import extract_imports, check_and_install_dependencies
 
+# Export the list_workspaces function to be callable externally
+__all__ = ['execute', 'list_workspaces']
+
 logger = logging.getLogger(__name__)
 
 # Create helper functions to log with provider name prefix
@@ -73,6 +76,49 @@ async def get_or_create_daytona_client(target_region: str) -> Daytona:
         
         return _daytona_clients[target_region]
 
+async def list_workspaces(target_region: str) -> List:
+    """
+    List existing workspaces to warm up the Daytona connection pool.
+    
+    Args:
+        target_region: Target region to list workspaces from (e.g., 'eu', 'us')
+        
+    Returns:
+        List of workspace objects
+    """
+    loop = asyncio.get_running_loop()
+    
+    # Use the module-level persistent global dedicated executor
+    global _daytona_executor
+    daytona_executor = _daytona_executor
+    
+    # Get the semaphore for API rate limiting
+    global _api_semaphore
+    if not hasattr(execute, '_api_semaphore'):
+        execute._api_semaphore = asyncio.Semaphore(1)
+    api_semaphore = execute._api_semaphore
+    
+    try:
+        # Get client for this region
+        daytona = await get_or_create_daytona_client(target_region)
+        
+        # Use semaphore to respect API rate limits
+        async with api_semaphore:
+            log_debug("Acquired API semaphore for listing workspaces")
+            
+            # List workspaces using the persistent executor
+            # This triggers the warm pool preparation on Daytona's side
+            workspaces = await loop.run_in_executor(daytona_executor, daytona.list)
+            
+            # Add a small delay to avoid API rate limiting
+            await asyncio.sleep(API_WAIT_TIME)
+            
+        log_info(f"Listed {len(workspaces)} existing workspaces in {target_region}")
+        return workspaces
+    except Exception as e:
+        log_error(f"Error listing workspaces: {str(e)}")
+        return []
+
 async def execute(
     code: Union[str, Dict[str, Any]], 
     executor: ThreadPoolExecutor, 
@@ -121,6 +167,12 @@ async def execute(
     api_semaphore = execute._api_semaphore
     
     try:
+        # List existing workspaces to warm up Daytona's pool
+        log_info(f"Warming up Daytona pool in {target_region} region...")
+        warm_start = time.time()
+        await list_workspaces(target_region)
+        metrics.add_metric("Warmup Time", time.time() - warm_start)
+        
         # Get or create Daytona client for this region (shared across executions)
         log_info(f"Creating workspace in {target_region} region...")
         start = time.time()
