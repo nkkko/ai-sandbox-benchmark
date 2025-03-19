@@ -61,6 +61,7 @@ async def execute(code: str, env_vars: Dict[str, str] = None):
             # Mapping metric names as done in the original code.
             mapping = {
                 'workspaceCreation': 'Workspace Creation',
+                'setupTime': 'Setup Time',
                 'codeExecution': 'Code Execution',
                 'cleanup': 'Cleanup'
             }

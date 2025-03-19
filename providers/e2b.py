@@ -60,6 +60,9 @@ async def execute(code: str, env_vars: Dict[str, str] = None):
                 'scipy',  # Required for FFT tests
             ]
         
+        # Start measuring actual setup time
+        setup_start = time.time()
+        
         # Use the centralized dependency installation utility
         dependency_checker = f"""
 import sys
@@ -73,7 +76,7 @@ installed_packages = check_and_install_dependencies(
 print(f"Installed packages: {{installed_packages}}")
 """
         sandbox.run_code(dependency_checker)
-
+        
         # For FFT performance test, ensure packages are properly installed
         if "from scipy import fft" in code:
             log_info("FFT test detected, installing packages with system pip...")
@@ -82,6 +85,14 @@ print(f"Installed packages: {{installed_packages}}")
 pip install --user numpy scipy
 """
             sandbox.run_code(pip_install)
+            
+        # Record setup time (convert to milliseconds)
+        setup_time = (time.time() - setup_start) * 1000  
+        log_info(f"Actual measured setup time: {setup_time}ms")
+        
+        # Ensure setup time is treated as already in milliseconds
+        metrics.ms_metrics.add("Setup Time")
+        metrics.add_metric("Setup Time", setup_time)
             
         # Run the code
         start = time.time()

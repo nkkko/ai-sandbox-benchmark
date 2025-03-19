@@ -15,16 +15,25 @@ import asyncio
 import statistics
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
-from daytona_sdk import Daytona, DaytonaConfig, CreateWorkspaceParams
+from daytona_sdk import Daytona, DaytonaConfig, CreateSandboxParams
 
 # Load environment variables
 load_dotenv()
 
 # Global configuration
-DAYTONA_API_KEY = os.getenv("DAYTONA_API_KEY")
-DAYTONA_SERVER_URL = os.getenv("DAYTONA_SERVER_URL", "https://app.daytona.io/api")
+USE_STAGE = os.getenv("USE_DAYTONA_STAGE", "false").lower() == "true"
+
+# Use the appropriate Daytona environment based on the flag
+if USE_STAGE:
+    DAYTONA_API_KEY = os.getenv("DAYTONA_STAGE_API_KEY")
+    DAYTONA_SERVER_URL = os.getenv("DAYTONA_STAGE_SERVER_URL", "https://stage.daytona.work/api")
+    print("Using Daytona STAGING environment")
+else:
+    DAYTONA_API_KEY = os.getenv("DAYTONA_API_KEY")
+    DAYTONA_SERVER_URL = os.getenv("DAYTONA_SERVER_URL", "https://app.daytona.io/api")
+    print("Using Daytona PRODUCTION environment")
 TARGET_REGION = "eu"  # Change as needed
-NUM_WORKSPACES = 3    # Number of workspaces to create in each test
+NUM_WORKSPACES = 5    # Number of workspaces to create in each test
 IMAGE = ""
 
 # Helper functions for prettier output
@@ -44,7 +53,8 @@ def print_result(name, times):
 # Create a Daytona client
 def create_daytona_client():
     if not DAYTONA_API_KEY:
-        raise ValueError("DAYTONA_API_KEY environment variable not set")
+        env_var = "DAYTONA_STAGE_API_KEY" if USE_STAGE else "DAYTONA_API_KEY"
+        raise ValueError(f"{env_var} environment variable not set")
 
     config = DaytonaConfig(
         api_key=DAYTONA_API_KEY,
@@ -58,7 +68,7 @@ async def create_workspace(client, executor, index):
     print(f"Creating workspace {index+1}/{NUM_WORKSPACES}...")
     start_time = time.time()
 
-    params = CreateWorkspaceParams(
+    params = CreateSandboxParams(
         image=IMAGE,
         language="python"
     )

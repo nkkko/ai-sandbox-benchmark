@@ -40,7 +40,6 @@ async def execute(code: str, env_vars: Dict[str, str] = None):
     sandbox = None
     try:
         log_info("Creating sandbox...")
-        start = time.time()
 
         # Extract test configuration if available
         test_config = {}
@@ -76,12 +75,16 @@ async def execute(code: str, env_vars: Dict[str, str] = None):
             secrets = [modal.Secret.from_dict(env_dict)]
 
         # Create a sandbox with the app and image
+        log_info("Creating Modal sandbox...")
+        start = time.time()
         sandbox = modal.Sandbox.create(
             app=app,
             image=image,
             secrets=secrets  # This will be an empty list if no env vars
         )
-
+        # Track only the actual sandbox creation time
+        metrics.add_metric("Workspace Creation", time.time() - start)
+        
         # Write the code to a file inside the sandbox
         log_info("Writing code to sandbox...")
 
@@ -97,10 +100,8 @@ async def execute(code: str, env_vars: Dict[str, str] = None):
         )
         write_cmd.wait()
 
-        # Track setup time
-        metrics.add_metric("Workspace Creation", time.time() - start)
-
         # Initialize dependency utilities
+        setup_start = time.time()
         log_info("Creating dependency utilities in sandbox directly...")
         
         # Check for dependencies
@@ -224,6 +225,9 @@ print(f"Installed packages: {{installed_packages}}")
             log_info(f"Package installation output: {pip_stdout}")
             if pip_stderr:
                 log_warning(f"Package installation stderr: {pip_stderr}")
+                
+        # Record setup time
+        metrics.add_metric("Setup Time", time.time() - setup_start)
             
         # Execute the code
         log_info("Running code in sandbox...")

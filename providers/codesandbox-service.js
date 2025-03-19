@@ -74,6 +74,7 @@ app.post('/execute', async (req, res) => {
     const startTime = Date.now();
     const metrics = {
         workspaceCreation: 0, // Renamed from initialization to workspaceCreation for consistency with Python script
+        setupTime: 0,         // Track time spent on dependency installation and environment setup
         codeExecution: 0,
         cleanup: 0
     };
@@ -86,6 +87,10 @@ app.post('/execute', async (req, res) => {
         sandbox = await sdk.sandbox.create();
         metrics.workspaceCreation = Date.now() - createStart; // Measure workspace creation time
         log(`[${requestId}] Sandbox created successfully in ${metrics.workspaceCreation}ms`);
+
+        // Start measuring setup time
+        const setupStart = Date.now();
+        log(`[${requestId}] Beginning setup phase`);
 
         // Pass environment variables to the sandbox if provided
         if (env_vars && Object.keys(env_vars).length > 0) {
@@ -104,30 +109,13 @@ app.post('/execute', async (req, res) => {
         log(`[${requestId}] Checking for dependencies in code...`);
         const dependencyCheckerCode = `
 import sys
-
-# First, ensure the utils module is accessible
-try:
-    from providers.utils import check_and_install_dependencies
-except ImportError:
-    # If running in a fresh container, create the providers directory and utils.py
-    import os, subprocess
-    
-    # Create providers directory if it doesn't exist
-    if not os.path.exists('providers'):
-        os.makedirs('providers')
-        
-    # Create __init__.py in providers directory
-    with open('providers/__init__.py', 'w') as f:
-        f.write('# Package initialization')
-    
-    # Create utils.py with necessary code
-    with open('providers/utils.py', 'w') as f:
-        f.write("""
-import importlib
+import os
+import subprocess
 import re
-import sys
+import importlib
 from typing import List, Set, Optional, Dict, Any
 
+# Directly define the utility functions in the script without trying to import from providers module
 def is_standard_library(module_name: str) -> bool:
     # Standard approach to detect standard library modules
     try:
@@ -154,8 +142,6 @@ def check_and_install_dependencies(
     provider_context: Optional[Dict[str, Any]] = None,
     always_install: Optional[List[str]] = None
 ) -> List[str]:
-    import subprocess
-    
     installed_packages = []
     
     # Install packages that should always be available
@@ -179,6 +165,10 @@ def check_and_install_dependencies(
     
     # Check each third-party module and install if missing
     for module in third_party_modules:
+        # Skip "providers" module since it's not a PyPI package
+        if module == "providers":
+            continue
+            
         try:
             importlib.import_module(module)
             print(f"Module {module} is already installed.")
@@ -189,10 +179,6 @@ def check_and_install_dependencies(
             installed_packages.append(module)
     
     return installed_packages
-""")
-    
-    # Import again after creating the file
-    from providers.utils import check_and_install_dependencies
 
 # Get packages to install from test config if available
 always_install_packages = []
@@ -200,7 +186,7 @@ always_install_packages = []
 ${test_config && test_config.packages ? `
 # Use packages from test configuration
 always_install_packages = ${JSON.stringify(test_config.packages)}
-log("Using packages from test config: " + str(always_install_packages))
+print("Using packages from test config: " + str(always_install_packages))
 ` : `
 # Default packages to install
 always_install_packages = [
@@ -229,6 +215,10 @@ pip install --user numpy scipy
             const pipResult = await sandbox.shells.python.run(pipInstallCode);
             log(`[${requestId}] Package installation output: ${pipResult.output}`);
         }
+        
+        // End setup time measurement
+        metrics.setupTime = Date.now() - setupStart;
+        log(`[${requestId}] Setup phase completed in ${metrics.setupTime}ms`);
         
         const execStart = Date.now();
         log(`[${requestId}] Executing code in sandbox`);

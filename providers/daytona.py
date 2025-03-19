@@ -8,7 +8,7 @@ import json
 import base64
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List, Union, Tuple, Optional
-from daytona_sdk import Daytona, DaytonaConfig, CreateWorkspaceParams
+from daytona_sdk import Daytona, DaytonaConfig, CreateSandboxParams
 from metrics import BenchmarkTimingMetrics
 from providers.utils import extract_imports, check_and_install_dependencies
 
@@ -53,12 +53,21 @@ async def get_or_create_daytona_client(target_region: str) -> Daytona:
         if target_region not in _daytona_clients:
             log_info(f"Creating new Daytona client for region {target_region}")
             
-            # Get API credentials from environment
-            api_key = str(os.getenv("DAYTONA_API_KEY"))
-            server_url = str(os.getenv("DAYTONA_SERVER_URL", "https://app.daytona.io/api"))
+            # Check if we should use staging environment
+            use_stage = os.getenv("USE_DAYTONA_STAGE", "false").lower() == "true"
+            
+            # Get API credentials from environment based on environment choice
+            if use_stage:
+                api_key = str(os.getenv("DAYTONA_STAGE_API_KEY"))
+                server_url = str(os.getenv("DAYTONA_STAGE_SERVER_URL", "https://stage.daytona.work/api"))
+                log_info(f"Using Daytona staging environment: {server_url}")
+            else:
+                api_key = str(os.getenv("DAYTONA_API_KEY"))
+                server_url = str(os.getenv("DAYTONA_SERVER_URL", "https://app.daytona.io/api"))
             
             if not api_key:
-                raise ValueError("DAYTONA_API_KEY environment variable not set")
+                env_var = "DAYTONA_STAGE_API_KEY" if use_stage else "DAYTONA_API_KEY"
+                raise ValueError(f"{env_var} environment variable not set")
             
             # Set environment variables that might affect the SDK's HTTP client
             # Force a more conservative connection behavior
@@ -175,13 +184,12 @@ async def execute(
         
         # Get or create Daytona client for this region (shared across executions)
         log_info(f"Creating workspace in {target_region} region...")
-        start = time.time()
         
         # Get a cached or new Daytona client with improved HTTP client settings
         daytona = await get_or_create_daytona_client(target_region)
         
         # Configure workspace parameters with improved defaults
-        params = CreateWorkspaceParams(
+        params = CreateSandboxParams(
             image=image,
             language="python"
         )
@@ -190,15 +198,20 @@ async def execute(
         async with api_semaphore:
             log_debug("Acquired API semaphore for workspace creation")
             
+            # Start timing just the actual workspace creation API call
+            start = time.time()
+            
             # Create workspace using our persistent single-worker executor
             # This prevents thread pool contention when multiple providers execute
             workspace = await loop.run_in_executor(daytona_executor, daytona.create, params)
+            
+            # Measure actual workspace creation time without API semaphore or rate limiting
+            metrics.add_metric("Workspace Creation", time.time() - start)
             
             # Add a small delay to avoid API rate limiting
             await asyncio.sleep(API_WAIT_TIME)
         
         log_info(f"Workspace created: {workspace.id}")
-        metrics.add_metric("Workspace Creation", time.time() - start)
 
         # Prepare consolidated setup script for dependencies and environment
         setup_code = await prepare_setup_code(code_str, env_vars, test_config)
@@ -230,17 +243,19 @@ async def execute(
         
         # Execute the actual code with the same persistent executor
         log_info("Executing code...")
-        start = time.time()
         
         # Use semaphore to ensure we respect API rate limits
         async with api_semaphore:
             log_debug("Acquired API semaphore for code execution")
+            
+            # Start timing only the actual code execution API call
+            start = time.time()
             response = await loop.run_in_executor(daytona_executor, workspace.process.code_run, code_str)
-            # Add a small delay to avoid API rate limiting
+            execution_time = time.time() - start
+            
+            # Add a small delay to avoid API rate limiting (not part of the timing)
             await asyncio.sleep(API_WAIT_TIME)
             
-        execution_time = time.time() - start
-        
         log_info(f"Code execution completed in {execution_time:.2f}s (workspace: {workspace.id})")
         metrics.add_metric("Code Execution", execution_time)
         

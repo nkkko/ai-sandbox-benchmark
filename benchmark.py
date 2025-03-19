@@ -60,10 +60,10 @@ def run_plain_benchmark(test_ids, providers, runs, warmup_runs, region):
         measurement_runs=runs,
         num_concurrent_providers=len(providers)
     )
-    
+
     # Get tests to run
     tests_to_run = {test_id: comp.defined_tests[test_id] for test_id in test_ids}
-    
+
     # Run the benchmark using asyncio
     import asyncio
     try:
@@ -71,18 +71,18 @@ def run_plain_benchmark(test_ids, providers, runs, warmup_runs, region):
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    
+
     results = loop.run_until_complete(executor.run_comparison(
         tests_to_run,
         providers,
         runs,
         region
     ))
-    
+
     # Visualize results
     visualizer = comp.ResultsVisualizer()
     visualizer.print_detailed_comparison(results, tests_to_run, runs, warmup_runs, providers)
-    
+
     # In CLI mode, we don't need to wait for input
     if not '--cli' in sys.argv:
         print("\nBenchmark finished. Press Enter to return to main menu...")
@@ -241,20 +241,20 @@ class BenchmarkTUI:
         """Display the providers configuration screen."""
         self.stdscr.addstr(4, 3, "Select Providers:", curses.A_BOLD)
         self.stdscr.addstr(5, 3, "Use ↑/↓ to navigate, Space to toggle, Enter to confirm, q to return")
-        
+
         # Add toggle all option
         y = 7
         status = "[A] Toggle All Providers"
         attr = curses.A_NORMAL
-        
+
         if self.menu_cursor == 0:
             attr |= curses.A_BOLD
             self.stdscr.addstr(y, 5, "→ ", attr)
         else:
             self.stdscr.addstr(y, 5, "  ")
-            
+
         self.stdscr.addstr(y, 7, status, attr)
-        
+
         # Display separator
         self.stdscr.addstr(y + 1, 7, "─" * 30)
 
@@ -280,20 +280,20 @@ class BenchmarkTUI:
         """Display the tests configuration screen."""
         self.stdscr.addstr(4, 3, "Select Tests:", curses.A_BOLD)
         self.stdscr.addstr(5, 3, "Use ↑/↓ to navigate, Space to toggle, Enter to confirm, q to return")
-        
+
         # Add toggle all option
         y = 7
         status = "[A] Toggle All Tests"
         attr = curses.A_NORMAL
-        
+
         if self.menu_cursor == 0 and self.scroll_offset == 0:
             attr |= curses.A_BOLD
             self.stdscr.addstr(y, 5, "→ ", attr)
         else:
             self.stdscr.addstr(y, 5, "  ")
-            
+
         self.stdscr.addstr(y, 7, status, attr)
-        
+
         # Display separator
         self.stdscr.addstr(y + 1, 7, "─" * 30)
 
@@ -325,7 +325,7 @@ class BenchmarkTUI:
             cursor_pos = i + display_offset
             if display_offset == 0:
                 cursor_pos += 1  # Shift by 1 for the "Toggle All" option
-                
+
             if cursor_pos == self.menu_cursor:
                 attr |= curses.A_BOLD  # Only use bold for selected item
                 self.stdscr.addstr(y, 5, "→ ", attr)
@@ -469,7 +469,7 @@ class BenchmarkTUI:
         elif key in (ord('q'), ord('Q')):
             return False
         return True
-            
+
     async def handle_main_menu_input(self, key):
         """Handle keyboard input on the main menu."""
         if key == curses.KEY_UP:
@@ -634,7 +634,7 @@ class BenchmarkTUI:
             max_cursor = test_count if self.scroll_offset > 0 else test_count
             if self.menu_cursor < max_cursor:
                 self.menu_cursor += 1
-                
+
                 # If we're past the toggle all option, adjust scrolling
                 if self.scroll_offset == 0 and self.menu_cursor > 1:
                     visible_height = min(self.height - 14, test_count)
@@ -660,7 +660,7 @@ class BenchmarkTUI:
                     test_index = self.menu_cursor - 1  # Adjust for toggle all option
                 else:
                     test_index = self.menu_cursor
-                
+
                 test_id = list(defined_tests.keys())[test_index]
                 if test_id in self.selected_tests:
                     self.selected_tests.remove(test_id)
@@ -845,21 +845,21 @@ class BenchmarkTUI:
 
             test_results = results.get(f"test_{test_id}", {})
 
-            # Get example output
-            first_run_results = test_results.get("run_1", {})
-            first_provider_output = None
-            for provider in self.selected_providers:
-                if provider in first_run_results and 'output' in first_run_results[provider]:
-                    first_provider_output = first_run_results[provider]['output']
-                    break
+            # # Get example output
+            # first_run_results = test_results.get("run_1", {})
+            # first_provider_output = None
+            # for provider in self.selected_providers:
+            #     if provider in first_run_results and 'output' in first_run_results[provider]:
+            #         first_provider_output = first_run_results[provider]['output']
+            #         break
 
-            if first_provider_output:
-                self.results_content.append(("Example Output:", curses.A_BOLD))
-                for line in first_provider_output.split('\n')[:5]:  # Show first 5 lines
-                    self.results_content.append((line, curses.A_NORMAL))
-                if first_provider_output.count('\n') > 5:
-                    self.results_content.append(("... (output truncated)", curses.A_NORMAL))
-                self.results_content.append(("", curses.A_NORMAL))
+            # if first_provider_output:
+            #     self.results_content.append(("Example Output:", curses.A_BOLD))
+            #     for line in first_provider_output.split('\n')[:5]:  # Show first 5 lines
+            #         self.results_content.append((line, curses.A_NORMAL))
+            #     if first_provider_output.count('\n') > 5:
+            #         self.results_content.append(("... (output truncated)", curses.A_NORMAL))
+            #     self.results_content.append(("", curses.A_NORMAL))
 
             # Process performance data
             metrics = ["Workspace Creation", "Code Execution", "Cleanup", "Total Time"]
@@ -937,13 +937,43 @@ class BenchmarkTUI:
 
 
 def run_tui():
-    """Simple wrapper function to run the TUI."""
+    """Simple wrapper function to run the TUI with fallback to CLI mode."""
     try:
         # Use a simple wrapper to handle curses setup/teardown
         curses.wrapper(run_with_curses)
     except KeyboardInterrupt:
         print("Benchmark interrupted by user.")
         sys.exit(0)
+    except Exception as e:
+        print("\n===================================")
+        print("ERROR: Could not initialize TUI interface")
+        print(f"Reason: {str(e)}")
+        print("===================================")
+        print("Falling back to CLI mode with default settings...")
+        print("To manually specify settings, use command line arguments like:")
+        print("  python benchmark.py --tests 1,2 --providers daytona --runs 3")
+        print("For more options, run: python benchmark.py --help")
+        print("===================================\n")
+
+        # Get default args
+        args = parse_args()
+        providers_list = args.providers.split(',')
+        test_ids = list(defined_tests.keys()) if args.tests == "all" else [int(tid) for tid in args.tests.split(',')]
+
+        # Confirm to the user what we're about to do
+        print(f"Running with providers: {', '.join(providers_list)}")
+        print(f"Tests: {len(test_ids)} tests selected")
+        print(f"Runs: {args.runs} (with {args.warmup_runs} warmup runs)")
+        print(f"Region: {args.target_region}\n")
+
+        # Use the plain benchmark runner with default settings
+        run_plain_benchmark(
+            test_ids,
+            providers_list,
+            args.runs,
+            args.warmup_runs,
+            args.target_region
+        )
 
 def run_with_curses(stdscr):
     """Run the TUI with a curses screen."""
@@ -954,7 +984,7 @@ def run_with_curses(stdscr):
 
     # Create the TUI
     tui = BenchmarkTUI(stdscr)
-    
+
     # Convert the async main_loop to a synchronous version
     # since curses and asyncio don't play well together
     running = True
@@ -1064,7 +1094,13 @@ if __name__ == "__main__":
     if 'codesandbox' in providers_list:
         check_codesandbox_service()
 
-    if args.cli:
+    if args.cli or any([
+        args.tests != 'all',
+        args.providers != 'daytona,e2b,codesandbox,modal,local',
+        args.runs != 1,
+        args.warmup_runs != 0,
+        args.target_region != 'eu'
+    ]):
         # Run in CLI mode with the provided arguments
         test_ids = []
         if args.tests == "all":
