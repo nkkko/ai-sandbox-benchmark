@@ -764,7 +764,7 @@ class ResultsVisualizer:
                 headers = ["Metric"] + [p.capitalize() for p in providers]
                 table_data = []
 
-                for metric in ["Workspace Creation", "Code Execution", "Internal Execution", "Cleanup"]:
+                for metric in ["Workspace Creation", "Code Execution", "Cleanup"]:
                     row = [metric]
                     for provider in providers:
                         all_runs_metrics = []
